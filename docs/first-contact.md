@@ -31,10 +31,27 @@ remaining eleven weeks will be measured against.
 ```
 
 The refused credentials are not server credentials. `root/anko` is a DVR
-default, `admin/smcadmin` an SMC router default, and the
-`enable` / `system` / `shell` sequence is the console-escalation pattern used
-against embedded busybox devices. All appear in the published Mirai credential
-table — see *Caveats* on verifying this properly.
+default and `admin/smcadmin` an SMC router default. **Four of the six pairs
+seen on day one — `root/anko`, `admin/smcadmin`, `root/root` and
+`admin/admin` — appear verbatim in the published Mirai credential table**,
+checked against [SecLists][seclists] on 25 September.
+
+The other two do not, and probably are not credentials at all.
+`enable\x00 / linuxshell\x00` and `system\x00 / shell\x00` are absent from
+that table — but `enable`, `system` and `shell` are the same words the
+successful session sent as *commands* after logging in. The likely
+explanation is that Cowrie's telnet handler read a command stream as login
+input on sessions that never authenticated, and recorded it as a
+username/password pair.
+
+That matters for counting. If it is right, a share of what the log calls
+*login attempts* are not attempts, and treating them as brute force would
+overstate the credential-guessing volume — which is the headline figure of
+the IT-door story. It is testable: those pairs should appear only in sessions
+with no successful login. **Run that check before publishing any login-attempt
+figure, and state which convention the analysis adopted.**
+
+[seclists]: https://github.com/danielmiessler/SecLists/blob/master/Passwords/Malware/mirai-botnet.txt
 
 ## What the successful session did
 
@@ -48,9 +65,6 @@ The first four commands land three thousandths of a second apart. Not a person.
 | `/bin/busybox HISILICON` | Liveness check, and the clearest signature in the session. HiSilicon makes the chipset in most cheap IP cameras and DVRs. There is no `HISILICON` applet — the bot wants busybox's exact *applet not found* error, which proves busybox is real and the device genuine. It also serves as a marker separating stages |
 | `/bin/busybox cat /proc/self/exe` | Reading its own binary to determine the CPU architecture, so it knows which build of the payload to fetch — MIPS, ARM or x86 |
 | `>/var/.f && chmod 777 /var/.f && /var/.f && cd /var/;` and eleven variants | Hunting for one writable directory across `/var`, `/var/tmp`, `/var/run`, `/dev`, `/dev/shm`, `/data`, `/etc`, `/mnt`, `/usr`, `/boot`, `/home` and `/root`. Create a file, make it executable, try to run it. The first that works is where the payload lands |
-
-
-![The infection sequence as recorded](infection-sequence.png)
 
 ## Two hosts, one script
 
@@ -103,11 +117,13 @@ the two, and it was visible in the first four minutes.
 - **Credentials can contain null bytes** (`enable\x00`). They arrive as
   `\u0000` in the JSON and must reach the database unmangled. The raw line is
   retained so a parsing decision can be revisited.
-- **Attribution is provisional.** The Mirai-family reading above is to be
-  confirmed against
-  [SecLists](https://github.com/danielmiessler/SecLists/blob/master/Passwords/Malware/mirai-botnet.txt)
-  and the [published scanner source](https://github.com/jgamblin/Mirai-Source-Code/blob/master/mirai/bot/scanner.c),
-  not asserted from familiarity.
+- **Credential attribution: checked on 25 September.** Four of the six pairs
+  are verbatim entries in the published Mirai credential table; two are not,
+  and are more likely a parsing artefact — see above. The `HISILICON` and
+  `/proc/self/exe` behaviour is still read as Mirai-family from the
+  [published scanner source](https://github.com/jgamblin/Mirai-Source-Code/blob/master/mirai/bot/scanner.c)
+  rather than confirmed line by line, so treat the family label itself as
+  probable rather than established.
 - **Technique mapping is provisional:** T1110 brute force, T1059 command and
   scripting interpreter, T1082 system information discovery, T1083 file and
   directory discovery, and an attempted T1105 ingress tool transfer that did
