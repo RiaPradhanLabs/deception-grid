@@ -160,6 +160,108 @@ Port 22 was separately confirmed reachable from an external address the same
 morning, so the fact that every early arrival came in on telnet is a property
 of the traffic rather than a fault in the setup. See `first-contact.md`.
 
+## The OT decoy
+
+Conpot, installed 25 September 2026, under its own `conpot` user with no
+password, no `sudo` and a single group — the same isolation as Cowrie, for the
+same reason.
+
+### It needs a newer Python than the machine has
+
+Conpot released **1.0.0 on 20 September 2026**, five days before this install.
+It is a platform rewrite, not a point release: asyncio in place of gevent,
+templates in TOML instead of XML, `pymodbus` underneath, and structured JSON
+logging with source address and port as named fields. Every Conpot guide
+written before that date describes software that no longer exists.
+
+Three obstacles, in the order they appeared:
+
+**PyPI still serves 0.6.0, and 0.6.0 must not be used.** It pulls in `enum34`,
+a Python 2 backport that installs a package called `enum` and shadows the
+standard library on Python 3, and `pycrypto`, unmaintained for years with
+known vulnerabilities. Neither belongs on an internet-facing machine.
+
+**1.0.0 refuses to install on Python 3.12.** It requires 3.14; Ubuntu 24.04
+ships 3.12.3:
+
+```
+ERROR: Package 'conpot' requires a different Python: 3.12.3 not in '>=3.14'
+```
+
+**The fix is a standalone Python, not a system one.** `uv` installs CPython
+3.14.7 into the decoy user's own home in about a second. No root, no PPA, the
+system Python untouched, and therefore Cowrie unaffected. Conpot's own
+documentation recommends uv, which is why this was chosen over Docker: one
+extra daemon on a 1 GB machine, and an awkward fit with the systemd socket
+activation already in use, bought nothing here.
+
+```
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv python install 3.14
+uv venv --python 3.14 conpot-env
+uv pip install "conpot @ git+https://github.com/mushorg/conpot@v1.0.0"
+```
+
+### The version string is wrong
+
+The installed package reports **0.6.0**, and its CLI banner still offers a
+`--mibcache` flag for a feature the 1.0.0 notes say was removed. It is
+nonetheless the rewrite: the dependency set is `aiohttp`, `bacpypes3`,
+`pymodbus`, `cm-ethernetip`, with no gevent and no enum34, and the templates
+are TOML rather than XML. The release simply did not bump the version.
+
+**The commit hash is the only trustworthy identifier**, exactly as for Cowrie.
+Note also that `pip` and `uv` resolved the `v1.0.0` tag to different commits
+(`971bf0f2…` and `c9245e6c…` respectively); the installed build is the latter.
+
+### Template
+
+`plc_modbus` — a device description and a Modbus register map, and nothing
+else. The shipped `default` template enables nine protocols at once, and a
+single device answering BACnet and S7 and Modbus and FTP is not something that
+exists in a real plant. The controlled comparison this project rests on is
+worth more than the extra traffic.
+
+### What the live test found
+
+Tested on the default high port with both firewall layers still closed, using
+raw Modbus frames sent over a socket rather than a client library, so the
+results describe the wire rather than somebody's implementation.
+
+**The framing works.** `mode = "serial"` in the template does not break
+Modbus/TCP. A standard MBAP-framed read returned a correctly formed exception
+(`83 02`, illegal data address), and a device-identification request returned
+the three configured strings length-prefixed, as a real controller would. This
+was the main risk and it is retired.
+
+**Five defects in the shipped template**, all of which need fixing before the
+OT door opens:
+
+| Defect | Why it matters |
+|---|---|
+| `vendor = "Conpot"` in `template.toml` | The decoy's identity block is labelled with the name of the honeypot software |
+| Listens on 5020, not 502 | The whole OT argument depends on the real Modbus port. 502 is privileged, so it needs systemd socket activation |
+| Registers answer at `40001`, `30001`, coil `1`, and return *illegal data address* at `0` | `40001` is the **documentation** convention; on the wire, holding register 40001 is address `0`. A scanner reading from zero gets only errors — lost data, and a tell, since real controllers answer low addresses |
+| Every register reads zero, unchanged over four reads in thirty seconds | `PlcScanCycle` is configured to animate them and does not. A controller whose registers never move is not controlling anything |
+| Fetches its own public address from an external service on startup | An outbound connection from the VM, which this project's scope explicitly excludes. See the correction in `rules-of-engagement.md` |
+
+Also worth changing: Conpot created its temporary filesystem inside its own
+installed package directory. `--temp_dir` should point somewhere that is not
+`site-packages`, so that reinstalling does not tangle with runtime state.
+
+### The identity question, still open
+
+The shipped device — Schneider Electric, Modicon M340, BMXP342020 — is a real
+and plausible PLC for a small manufacturer. It is also Conpot's default, so
+every unmodified Conpot on the internet claims to be the same M340 with the
+same four blocks of exactly eight registers at the same addresses. Keeping it
+means blending in with other honeypots rather than with real plants.
+
+This is a design decision about what the imaginary factory is, and it is
+deliberately not being made in a hurry.
+
+
+
 ## Known limitations
 
 **The fake user is Cowrie's default.** `/etc/passwd` in the imitation contains
