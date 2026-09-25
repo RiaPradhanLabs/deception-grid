@@ -12,11 +12,11 @@ probes anything, and never runs what is sent to it.
 
 The governing document for security work on Azure resources is Microsoft's
 **Cloud Penetration Testing Rules of Engagement**. Version as on
-[24/09/2026], and the two relevant screenshots are saved in this folder
+[24/09/2026], and the two screenshots are saved in this folder
 
-![Prohibited activities](images/azure-roe-prohibited.png)
+![Prohibited activities](azure-roe-prohibited.png)
 
-![Encouraged activities](images/azure-roe-encouraged.png)
+![Encouraged activities](azure-roe-encouraged.png)
 
 **What it prohibits** is, in substance, anything that reaches past your own
 resources: touching assets or data belonging to other Microsoft customers,
