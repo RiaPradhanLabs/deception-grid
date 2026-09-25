@@ -32,6 +32,27 @@ Its image list has no Linux in it, so chose Ubuntu 24.04 undert he
 capacity. Sweden Central was refused by the subscription's own region policy.
 Austria East worked. About 40 minutes lost D':.
 
+## The admin address problem
+
+Discovered the morning after the build: SSH timed out. Nothing was wrong with
+the machine - the admin rule allows exactly one source address, and a
+residential connection had been given a new one overnight.
+
+The two addresses were not neighbours. They sat in unrelated ranges, which
+rules out the obvious fix of allowing the provider's block. Time to diagnose,
+knowing what to look for: about 20 minutes. "Timed out" rather than "refused"
+was the clue that mattered - a refusal means the host answered, a timeout
+means nothing did.
+
+The choice was between three options: rewrite the rule each session, widen it
+to something permanent and looser, or automate it. Automating it keeps the
+strictest version of the control and removes the operational cost that would
+eventually have argued for weakening it. See `scripts/allow-me.ps1`.
+
+A control that is expensive to comply with gets bypassed, and the bypass is 
+usually invisible until something goes wrong. Thecheapest way to keep a strict
+rule is to make obeying it take one command.
+
 ## Hardening, in order
 
 1. `sudo apt update && sudo apt full-upgrade -y`
