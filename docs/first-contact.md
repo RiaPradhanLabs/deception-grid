@@ -49,6 +49,9 @@ The first four commands land three thousandths of a second apart. Not a person.
 | `/bin/busybox cat /proc/self/exe` | Reading its own binary to determine the CPU architecture, so it knows which build of the payload to fetch — MIPS, ARM or x86 |
 | `>/var/.f && chmod 777 /var/.f && /var/.f && cd /var/;` and eleven variants | Hunting for one writable directory across `/var`, `/var/tmp`, `/var/run`, `/dev`, `/dev/shm`, `/data`, `/etc`, `/mnt`, `/usr`, `/boot`, `/home` and `/root`. Create a file, make it executable, try to run it. The first that works is where the payload lands |
 
+
+![The infection sequence as recorded](infection-sequence.png)
+
 ## Two hosts, one script
 
 At 08:15:40 a different address, `92.53.214.135`, ran the same sequence.
