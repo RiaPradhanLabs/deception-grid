@@ -1,0 +1,26 @@
+# Which credentials this decoy accepts. Written deliberately on
+# 25 September 2026; without this file Cowrie uses undocumented
+# built-in defaults, and the accepted set is the independent variable
+# of the whole experiment.
+#
+# Format: username:unused:password
+#   '!' prefix denies    '/.../' is a regular expression
+#   processing stops at the first match; no match means refused
+
+# Deny the probes used to detect decoys. A honeypot that accepts a
+# self-referential password announces itself.
+root:x:!/honeypot/i
+root:x:!/cowrie/i
+
+# The five accepted credentials, chosen from the passwords most often
+# attempted against internet-facing SSH. Choosing common ones on purpose
+# is what makes "this share of real attempts would have succeeded" a
+# measurable result rather than an artefact of an odd choice.
+root:x:123456
+root:x:password
+root:x:admin
+root:x:1234
+root:x:root
+
+# Anything else is refused. Refused attempts are still logged in full,
+# and that log is where the credential-stuffing analysis comes from.

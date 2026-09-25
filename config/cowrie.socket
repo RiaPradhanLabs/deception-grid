@@ -1,0 +1,13 @@
+[Unit]
+Description=Cowrie SSH and Telnet honeypot sockets
+PartOf=cowrie.service
+
+[Socket]
+# Order matters: cowrie.cfg refers to these by index.
+#   index 0 -> ssh      index 1 -> telnet
+# Addresses written explicitly rather than as a bare port number.
+ListenStream=0.0.0.0:22
+ListenStream=0.0.0.0:23
+
+[Install]
+WantedBy=sockets.target
