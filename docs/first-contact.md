@@ -124,10 +124,34 @@ the two, and it was visible in the first four minutes.
   [published scanner source](https://github.com/jgamblin/Mirai-Source-Code/blob/master/mirai/bot/scanner.c)
   rather than confirmed line by line, so treat the family label itself as
   probable rather than established.
-- **Technique mapping is provisional:** T1110 brute force, T1059 command and
-  scripting interpreter, T1082 system information discovery, T1083 file and
-  directory discovery, and an attempted T1105 ingress tool transfer that did
-  not complete. Confirm against the ATT&CK matrix before publishing.
+- **Technique mapping: checked on 25 September.** See the table below.
+
+## Technique mapping
+
+Checked against the ATT&CK matrix on 25 September. Checking changed it in two
+places, which is the argument for doing it rather than asserting it.
+
+| Technique | Where it appears | Status |
+|---|---|---|
+| **T1110.001** Password Guessing | The refused credential attempts | Verified. Not credential stuffing, which means breached username/password pairs, and not spraying, which means one password across many accounts |
+| **T1078.001** Valid Accounts: Default Accounts | `root/root` succeeding | Verified, and missing from the first draft. ATT&CK covers factory-set credentials on devices left unchanged after installation |
+| **T1082** System Information Discovery | `cat /proc/self/exe` | Verified as explicitly covering processor architecture |
+| **T1105** Ingress Tool Transfer | The payload that never arrived | Verified. Ours is *attempted and not observed completing* |
+| **T1497** Virtualization/Sandbox Evasion | `/bin/busybox HISILICON` | Probable, page not read in full. The check exists to confirm a real device rather than an analysis environment |
+| **T1059.004** Unix Shell | `sh` / `shell` / `enable` / `system` | Sub-technique unverified; the parent T1059 is not in doubt |
+| **T1083** File and Directory Discovery | The writable-directory hunt | Unverified. Defensible, but no ATT&CK technique cleanly describes *testing whether a directory is writable* |
+
+**T1078.001 is the one that matters.** It was absent from the first draft and
+it is the most actionable technique here: the break-in was not an exploit, it
+was a default password nobody changed. That is a recommendation a
+forty-person factory can act on this week, and it is now evidenced by a
+specific event at a specific second.
+
+**T1497 connects this mapping to the decoy's own limitation.** If the bot ran
+a liveness check to confirm it was on real hardware, and then left without
+delivering a payload, the most likely reading is that the imitation failed
+that check. The technique mapping and the honest account of the instrument's
+weakness describe the same moment from two directions.
 
 ## The telnet skew is real
 
