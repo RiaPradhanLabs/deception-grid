@@ -22,7 +22,7 @@ A single Ubuntu VM exposes two decoy services to the internet and records everyt
 
 Neither executes anything sent to it. The machine only ever receives; it never initiates a connection outward. An hourly Python job normalises both logs into one SQLite database, and a local dashboard reads from it.
 
-The second decoy is the point. One honeypot tells you the internet is noisy. Two, on the same address at the same time, let you compare who knocks on an office door with who goes looking for factory equipment.
+The second decoy provides the actually interesting information. The first one honeypot shows that the internet is noisy. The second, on the same address at the same time, compares who knocks on an office door vs who goes looking for factory equipment.
 
 ## How it was built
 
