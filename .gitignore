@@ -1,0 +1,34 @@
+# Cowrie stores what attackers upload, and much of it is live malware.
+# Nothing from these directories is ever committed.
+dl/
+downloads/
+var/
+*.elf
+*.bin
+*.zip
+*.tar.gz
+
+# Data: commit aggregates only, never the live database or raw logs
+*.sqlite
+*.sqlite3
+*.db
+cowrie.json*
+conpot.json*
+state.json
+
+# Secrets
+.env
+*.pem
+*.key
+id_ed25519*
+id_rsa*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS noise
+.DS_Store
+Thumbs.db
