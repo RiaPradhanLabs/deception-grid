@@ -1,0 +1,53 @@
+#!/bin/bash
+# decoy-status - one screen telling you whether the collection is alive.
+# The failures that matter here are silent, so this prints the things
+# that would be quietly wrong: service down, events stopped, disk full.
+#
+# Lives at /usr/local/bin/decoy-status, mode 755, root-owned.
+# Needs sudo: the Cowrie log sits in another user's home.
+set -u
+LOG=/home/cowrie/cowrie/var/log/cowrie/cowrie.json
+
+echo
+echo "  decoy-01 status - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+echo
+
+if systemctl is-active --quiet cowrie.service; then
+  echo "  service      running"
+else
+  echo "  service      NOT RUNNING"
+fi
+
+if [ -s "$LOG" ]; then
+python3 - "$LOG" <<'PY'
+import json, sys, datetime
+newest, events, sources = None, 0, set()
+with open(sys.argv[1]) as f:
+    for line in f:
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        events += 1
+        ip = e.get('src_ip')
+        if ip and ip != '127.0.0.1':
+            sources.add(ip)
+        t = e.get('timestamp')
+        if t and (newest is None or t > newest):
+            newest = t
+if newest:
+    ts = datetime.datetime.strptime(newest[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=datetime.timezone.utc)
+    gap = (datetime.datetime.now(datetime.timezone.utc) - ts).total_seconds()
+    print("  last event   %s  (%d min ago)" % (newest[:19].replace('T',' '), gap // 60))
+    if gap > 86400:
+        print("  WARNING      no events for over 24 hours")
+print("  events       %d" % events)
+print("  sources      %d distinct, loopback excluded" % len(sources))
+PY
+else
+  echo "  last event   LOG IS EMPTY"
+fi
+
+echo "  disk         $(df -h / | awk 'NR==2 {print $5" used of "$2}')"
+echo "  uptime       $(uptime -p)"
+echo
