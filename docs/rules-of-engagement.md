@@ -64,6 +64,23 @@ the operator is in Germany, the machine is in Austria. The position taken:
 6. **A fixed end date.** The machine is destroyed on 12 December 2026. An
    exposed machine that outlives its purpose is a liability, not an asset.
 
+## A correction, 25 September
+
+This document originally implied the decoys make no outbound connections at
+all. That was not accurate, and the inaccuracy was found while testing Conpot
+before exposing it.
+
+On startup, Conpot contacts an external service to discover the machine's own
+public address — `Fetched <address> as external ip` in its log. It sends
+nothing but the request, to a third-party address-echo service, and not to
+anything this project observes. It is configurable and is being disabled
+before Conpot goes live.
+
+It is recorded here rather than quietly fixed because a published claim later
+found to be wrong has to be corrected in public. The commitment that actually
+matters is unchanged and is stated precisely: **nothing in this project ever
+connects back to, scans, or responds to an address that appears in the logs.**
+
 ## If something goes wrong...
 
 The realistic failure is a decoy being used as a stepping stone. The
