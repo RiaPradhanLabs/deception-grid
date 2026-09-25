@@ -32,3 +32,6 @@ venv/
 # OS noise
 .DS_Store
 Thumbs.db
+
+# Local backups of the collection. Never committed.
+backups/
