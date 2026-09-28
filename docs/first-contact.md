@@ -153,16 +153,20 @@ delivering a payload, the most likely reading is that the imitation failed
 that check. The technique mapping and the honest account of the instrument's
 weakness describe the same moment from two directions.
 
-## The telnet skew is real
+## The telnet skew was not real — corrected 28 September
 
-Forty minutes, six sources, zero arrivals on port 22 — which could have meant
-either that telnet is scanned far more aggressively, or that port 22 was not
-actually reachable and half the intended comparison would quietly be empty.
+Forty minutes, six sources, zero arrivals on port 22. Port 22 was tested from
+an external address the same morning and answered correctly, so the skew was
+not a fault in the instrument, and it was written up here as a finding.
 
-Port 22 was tested from an external address the same morning and answered
-correctly, landing in the imitation. The skew is therefore a property of the
-traffic, not a fault in the instrument, and the comparison between the two IT
-doors is itself a result: on day one, telnet drew every single arrival.
+**It was not a finding. It was forty minutes of data.** Across the first full
+weekend the picture reverses: roughly four arrivals on port 22 for every one
+on port 23. See `first-weekend.md`.
 
-That test session appears in the log from the analyst's own address and is
-excluded at ingest alongside loopback.
+This correction is left in rather than edited away, because the mistake is
+instructive and cost nothing: an hour of anything looks like a pattern, and
+the discipline is to wait for enough of it. Nothing else in this note depends
+on the claim.
+
+The port-22 test session appears in the log from the analyst's own address
+and is excluded at ingest alongside loopback.
