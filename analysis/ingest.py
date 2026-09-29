@@ -228,29 +228,94 @@ def exclusion_reason(event, own):
             def readable(value):
                 return bool(value) and value.isprintable()
 
-            # KNOWN LIMITATION, stated rather than papered over. A field made of
-            # terminal control sequences -- '\x1b[A\x1b[B', the arrow keys --
-            # strips to '[A[B', which IS printable, so this rule counts it as a
-            # credential. No such row has been observed in this sensor's data;
-            # the case was invented while testing, not found.
+            # A field made of terminal control sequences -- '\x1b\x11ECFF' --
+            # strips to 'ECFF', which IS printable. When this was first written
+            # the case was hypothetical and was deliberately left unhandled, on
+            # the grounds that filtering against an imagined pattern is how the
+            # earlier versions of this rule went wrong.
             #
-            # It is deliberately not fixed. Adding a rule for a pattern nobody
-            # has seen means writing a filter against imagination, and every bad
-            # exclusion rule on this project began that way. The check is
-            # instead written down as a standing query -- see weekly.sql, "login
-            # rows that contain an escape and still count" -- so if it ever
-            # appears it appears as data, and the rule gains a case with
-            # evidence behind it.
+            # It then turned up in the real data within the hour. The handling
+            # below is therefore evidence-driven, and the standing query that
+            # surfaced it -- weekly.sql, "login rows that contain an escape and
+            # still count" -- stays, because it is what found this one.
 
+            # Version five. The discriminator is whether the password field was
+            # EMPTY IN THE LOG, not whether it is empty after stripping. Version
+            # four tested `sp`, the stripped value, which collapses two cases
+            # that the data shows are different:
+            #
+            #   'daemon\x00'      ''                      -> REAL
+            #   '\x1b\x11ECFF'    '\x1b\x13\x04\x1a\x1f\x18' -> ARTEFACT
+            #
+            # Both have a username that survives stripping. In the first the
+            # password field is genuinely empty, which is an ordinary probe. In
+            # the second it was full of control bytes that stripped away to
+            # nothing -- the terminal-control case recorded above as a "known
+            # limitation that has never appeared". It had appeared: twice, in
+            # this sensor's own data, and only reading the excluded rows found
+            # it. Written down because it is the fourth time on this project
+            # that a rule was wrong and the rows, not the totals, said so.
             if not readable(su):
                 return 'artefact-binary'
-            if sp and not readable(sp):
+            if (pw or '') != '' and not readable(sp):
                 return 'artefact-binary'
             u_cmd = su.lower() in CONSOLE_WORDS or su.startswith('/bin/')
             p_cmd = sp.lower() in CONSOLE_WORDS or sp.startswith('/bin/')
             if u_cmd and p_cmd:
                 return 'artefact-command'
     return None
+
+
+def relabel(db, own):
+    """Re-apply the exclusion rules to every row already in the database.
+
+    This exists because of a bug found on 29 September 2026. `excluded` is
+    computed when a row is inserted, and `INSERT OR IGNORE` never touches a row
+    it already holds -- so narrowing the artefact rule relabelled NOTHING. The
+    code said one thing and the database said another, silently, and the only
+    way to notice was to read the excluded list and see a row that the current
+    rule would have admitted.
+
+    That is exactly the failure this pipeline was built to prevent, so the fix
+    is not "remember to rebuild the database". Every run re-derives the label
+    for every row from `raw`, which makes the CODE the single authority and the
+    database a cache of it. Rebuilding from the logs would work too, but it
+    throws away the `runs` history, and the history is the evidence that the
+    pipeline has been running.
+
+    Conpot rows are normalised first: the rules take Cowrie-shaped records, and
+    a `conpot.` prefix on eventid is how a row says which decoy it came from.
+
+    Prints what changed and why. A silent relabel would be the same class of
+    problem as the bug it fixes.
+    """
+    changes = {}
+    updates = []
+    for row_id, eventid, raw, was in db.execute(
+            'SELECT id, eventid, raw, excluded FROM events'):
+        try:
+            record = json.loads(raw)
+        except Exception:
+            continue
+        event = (normalise_conpot(record)
+                 if eventid.startswith('conpot.') else record)
+        now_reason = exclusion_reason(event, own)
+        if now_reason != was:
+            updates.append((now_reason, row_id))
+            key = '%s -> %s' % (was or '(counts)', now_reason or '(counts)')
+            changes[key] = changes.get(key, 0) + 1
+
+    if updates:
+        db.executemany('UPDATE events SET excluded = ? WHERE id = ?', updates)
+        db.commit()
+
+    print()
+    print('=== relabelled against the current rules ===')
+    if not changes:
+        print('    nothing changed -- the database already matches the code')
+    for key, n in sorted(changes.items(), key=lambda kv: -kv[1]):
+        print('    %-44s %6d rows' % (key, n))
+    return sum(changes.values())
 
 
 def report(db):
@@ -445,6 +510,7 @@ def main():
     print('  already held      %d' % skipped)
     print('  would not parse   %d' % rejected)
 
+    relabel(db, own)
     report(db)
     db.close()
 
