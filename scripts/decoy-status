@@ -1,12 +1,23 @@
 #!/bin/bash
 # decoy-status - one screen telling you whether the collection is alive.
-# The failures that matter here are silent, so this prints the things
-# that would be quietly wrong: service down, events stopped, disk full.
+# The failures that matter here are silent, so this prints the things that
+# would be quietly wrong: service down, events stopped, disk full, and the
+# outbound block gone.
 #
 # Lives at /usr/local/bin/decoy-status, mode 755, root-owned.
-# Needs sudo: the Cowrie log sits in another user's home.
+# Needs sudo: the Cowrie log sits in another user's home, and the firewall
+# check reads iptables.
 set -u
-LOG=/home/cowrie/cowrie/var/log/cowrie/cowrie.json
+
+LOGDIR=/home/cowrie/cowrie/var/log/cowrie
+DOWNLOADS=/home/cowrie/cowrie/var/lib/cowrie/downloads
+COWRIE_UID=1001
+
+# Samples collected before outbound connections were blocked on 29 Sept 2026.
+# This number must not grow. If it does, the block in /etc/ufw/before.rules is
+# gone and the sensor is fetching files from attacker-controlled hosts again.
+# See docs/rules-of-engagement.md, "The outbound download problem".
+SAMPLE_BASELINE=104
 
 echo
 echo "  decoy-01 status - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
@@ -18,36 +29,81 @@ else
   echo "  service      NOT RUNNING"
 fi
 
-if [ -s "$LOG" ]; then
-python3 - "$LOG" <<'PY'
-import json, sys, datetime
-newest, events, sources = None, 0, set()
-with open(sys.argv[1]) as f:
-    for line in f:
-        try:
-            e = json.loads(line)
-        except ValueError:
-            continue
-        events += 1
-        ip = e.get('src_ip')
-        if ip and ip != '127.0.0.1':
-            sources.add(ip)
-        t = e.get('timestamp')
-        if t and (newest is None or t > newest):
-            newest = t
+# --- the outbound block -------------------------------------------------
+# A ufw or kernel package upgrade can replace before.rules and silently drop
+# this rule. Silently is the problem, so it gets checked on every status read.
+if iptables -L ufw-before-output -n 2>/dev/null \
+     | grep -q "owner UID match ${COWRIE_UID}"; then
+  echo "  outbound     blocked for cowrie (uid ${COWRIE_UID})"
+else
+  echo "  outbound     *** BLOCK MISSING - the decoy can reach out ***"
+  echo "               re-add the rule in /etc/ufw/before.rules and ufw reload"
+  echo "               see docs/build.md, 'Stopping the decoys reaching out'"
+fi
+
+# Second, independent canary: the block could be present but ineffective.
+# Counting files is evidence; reading the rule is only intent.
+if [ -d "$DOWNLOADS" ]; then
+  n=$(find "$DOWNLOADS" -maxdepth 1 -type f ! -name '.gitignore' | wc -l)
+  if [ "$n" -gt "$SAMPLE_BASELINE" ]; then
+    echo "  samples      $n  *** $(( n - SAMPLE_BASELINE )) NEW SINCE THE BLOCK ***"
+    echo "               files are still arriving: the block is not working"
+  else
+    echo "  samples      $n held, baseline $SAMPLE_BASELINE, none new"
+  fi
+fi
+
+# --- the log ------------------------------------------------------------
+# Cowrie rotates daily: cowrie.json is today, cowrie.json.YYYY-MM-DD the rest.
+# An earlier version of this script read cowrie.json alone and reported one
+# day's figures as though they were the whole collection.
+files=$(ls -1 "$LOGDIR"/cowrie.json* 2>/dev/null | wc -l)
+if [ "$files" -gt 0 ]; then
+  echo "  log files    $files"
+  python3 - "$LOGDIR" <<'PY'
+import datetime, glob, json, os, sys
+
+newest, events, sources, unreadable = None, 0, set(), 0
+for path in sorted(glob.glob(os.path.join(sys.argv[1], 'cowrie.json*'))):
+    with open(path, errors='replace') as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            try:
+                e = json.loads(line)
+            except ValueError:
+                unreadable += 1
+                continue
+            events += 1
+            ip = e.get('src_ip')
+            if ip and ip != '127.0.0.1':
+                sources.add(ip)
+            t = e.get('timestamp')
+            if t and (newest is None or t > newest):
+                newest = t
+
 if newest:
-    ts = datetime.datetime.strptime(newest[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=datetime.timezone.utc)
+    ts = datetime.datetime.strptime(newest[:19], '%Y-%m-%dT%H:%M:%S') \
+                          .replace(tzinfo=datetime.timezone.utc)
     gap = (datetime.datetime.now(datetime.timezone.utc) - ts).total_seconds()
-    print("  last event   %s  (%d min ago)" % (newest[:19].replace('T',' '), gap // 60))
+    print("  last event   %s  (%d min ago)"
+          % (newest[:19].replace('T', ' '), gap // 60))
     if gap > 86400:
         print("  WARNING      no events for over 24 hours")
-print("  events       %d" % events)
+
+print("  events       %d across all files" % events)
 print("  sources      %d distinct, loopback excluded" % len(sources))
+if unreadable:
+    print("  WARNING      %d log lines would not parse" % unreadable)
 PY
 else
-  echo "  last event   LOG IS EMPTY"
+  echo "  log files    NONE FOUND in $LOGDIR"
 fi
 
 echo "  disk         $(df -h / | awk 'NR==2 {print $5" used of "$2}')"
 echo "  uptime       $(uptime -p)"
+echo
+echo "  distinct sources here is a rough count straight off the log and will"
+echo "  differ slightly from ingest.py, which also excludes the analyst's own"
+echo "  addresses. ingest.py is the figure to quote."
 echo
