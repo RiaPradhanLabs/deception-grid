@@ -27,6 +27,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import sqlite3
 
 HERE     = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +38,13 @@ LOGS     = os.environ.get('DECOY_LOGS',
                           '/home/cowrie/cowrie/var/log/cowrie/cowrie.json*')
 
 LOGIN_EVENTS = ('cowrie.login.success', 'cowrie.login.failed')
+
+# Cowrie writes a non-printable byte in a credential as the LITERAL TEXT of a
+# C escape -- the four characters \, x, 0, 0 -- not as the byte itself. Checked
+# against the database on 29 September: hex(username) for the commonest pair is
+# 656E61626C655C783030, which is "enable" followed by 5C 78 30 30. A first
+# version of this rule tested for a real NUL byte and matched nothing at all.
+ESCAPED_BYTE = re.compile(r'\\x[0-9a-fA-F]{2}')
 
 
 def now():
@@ -72,10 +80,11 @@ def exclusion_reason(event, own):
       analyst   a session from one of our own addresses.
       artefact  a 'login attempt' that is not one. Cowrie's telnet handler
                 sometimes reads a stream of commands as login input and
-                records it as a username/password pair. Those contain NUL
-                bytes; a real credential attempt does not. The rule is the
-                NUL byte rather than a list of the pairs we happen to have
-                seen, so it also catches variants we have not seen.
+                records it as a username/password pair. Those carry an
+                escape for a non-printable byte, written as literal text;
+                a credential somebody actually typed does not. The rule is
+                the escape rather than a list of the pairs we happen to
+                have seen, so it also catches variants we have not seen.
 
     Anything else counts. If a fourth reason is ever added, it goes here and
     it goes in the documentation, because the exclusion list is part of the
@@ -88,7 +97,7 @@ def exclusion_reason(event, own):
         return 'analyst'
     if event.get('eventid') in LOGIN_EVENTS:
         for field in ('username', 'password'):
-            if '\x00' in (event.get(field) or ''):
+            if ESCAPED_BYTE.search(event.get(field) or ''):
                 return 'artefact'
     return None
 
