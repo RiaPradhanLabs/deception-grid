@@ -126,7 +126,40 @@ SELECT substr(seen, 1, 16) AS seen, why, substr(line, 1, 60) AS line_start
  LIMIT 10;
 
 .print
-.print === 12. Registration country of the busiest sources ===
+.print === 12. Files: fetched by us, or supplied by them? ===
+-- This distinction produced five wrong figures on 29 September 2026 and is the
+-- reason this query exists. Cowrie logs three different things under the single
+-- eventid cowrie.session.file_download. Only a `url` means an outbound fetch:
+--
+--   url present            we went and got it. OUTBOUND. Must be zero for any
+--                          timestamp after the block went in on 29 Sept 12:00.
+--   file_upload, no url    the attacker pushed it over scp. Inbound.
+--   file_download, no url  a shell redirection we captured. Inbound, and not
+--                          delivery at all -- it is the writable-directory
+--                          probe, which is why it yields few distinct files
+--                          from many events.
+--
+-- Never count these together, and never count files in the downloads directory
+-- as a proxy for any of them: redirection captures are named redir_<uuid>
+-- rather than by hash, so that directory holds more files than distinct content.
+SELECT CASE
+         WHEN eventid = 'cowrie.session.file_upload'          THEN 'pushed over scp'
+         WHEN json_extract(raw, '$.url') IS NOT NULL
+              AND eventid = 'cowrie.session.file_download'    THEN 'FETCHED - outbound'
+         WHEN json_extract(raw, '$.url') IS NOT NULL          THEN 'fetch failed - outbound'
+         ELSE 'shell redirection'
+       END                                      AS kind,
+       COUNT(*)                                 AS events,
+       COUNT(DISTINCT session)                  AS sessions,
+       COUNT(DISTINCT json_extract(raw, '$.shasum')) AS distinct_files,
+       substr(MAX(ts), 1, 16)                   AS last_seen
+  FROM v_events
+ WHERE eventid LIKE 'cowrie.session.file_%'
+ GROUP BY 1
+ ORDER BY 2 DESC;
+
+.print
+.print === 13. Registration country of the busiest sources ===
 -- Needs geo.sqlite, built by ./geo-lookup.sh. If that file does not exist yet
 -- this query reports "no such table: g.geo" and stops there; queries 1 to 11
 -- above are unaffected, and ATTACH leaves an empty geo.sqlite behind which

@@ -130,18 +130,24 @@ def exclusion_reason(event, own):
     if event.get('eventid') in LOGIN_EVENTS:
         user, pw = event.get('username'), event.get('password')
         su, sp = printable_part(user), printable_part(pw)
+        # Everything below is INSIDE this branch on purpose. Only a field that
+        # carries an escape is a candidate; a credential containing an ordinary
+        # non-ASCII character -- an accented letter, Cyrillic, CJK -- is a real
+        # attempt and must not be touched. An earlier version had the
+        # printability test outside this branch, which would have excluded any
+        # such password as 'binary'. Nothing had hit it yet; it was latent.
         if ESCAPED_BYTE.search(user or '') or ESCAPED_BYTE.search(pw or ''):
+            # Order matters. Test for garbage first, so that a field which
+            # strips to nothing is labelled binary rather than command.
+            for stripped in (su, sp):
+                if not stripped:
+                    return 'artefact-binary'
+                if not all(32 <= ord(c) < 127 for c in stripped):
+                    return 'artefact-binary'
             u_cmd = su.lower() in CONSOLE_WORDS or su.startswith('/bin/')
-            p_cmd = sp.lower() in CONSOLE_WORDS or sp.startswith('/bin/') or sp == ''
+            p_cmd = sp.lower() in CONSOLE_WORDS or sp.startswith('/bin/')
             if u_cmd and p_cmd:
                 return 'artefact-command'
-            if not su or not sp:
-                return 'artefact-command'
-        for stripped, raw in ((su, user), (sp, pw)):
-            if raw and not stripped:
-                return 'artefact-binary'
-            if stripped and not all(32 <= ord(c) < 127 for c in stripped):
-                return 'artefact-binary'
     return None
 
 
