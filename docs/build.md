@@ -496,6 +496,60 @@ works. The cost is that the Conpot process needs
 `ModuleNotFoundError`, which is the failure to prefer — loud, immediate, and
 impossible to mistake for a decoy that is working.
 
+### Nothing rotates its log
+
+Checked rather than assumed, 29 September 2026: there is no
+`RotatingFileHandler` or `TimedRotating` anywhere in the installed package, and
+no logrotate config ships with it. Conpot opens `conpot.json` and `conpot.log`
+with a plain file handler and writes to them until something stops it.
+
+At roughly 460 bytes per record this would not fill a 61 GB disk before the
+December teardown. "It probably will not overflow" is not a design, so
+`config/logrotate-deception-grid` rotates both daily, keeping 30.
+
+Two choices in it are load-bearing and neither is obvious.
+
+**`copytruncate`, not a rename.** Conpot holds the file open and has no way to be
+told to reopen it. A plain rename would leave it writing happily into the
+*rotated* file while `conpot.json` sat at zero bytes — and `decoy-status` would
+report "0 records" and be correct. The cost is that a line being written at the
+instant of rotation can be lost: one line a day, at midnight, against a decoy
+whose entire point is volume. The alternative, restarting Conpot on every
+rotation, drops live sessions and puts a gap in the collection every night.
+
+**`nocompress`, and a second defence in code.** `ingest.py` globs `conpot.json*`,
+which correctly picks up a rotated `conpot.json.1` — and would also match a
+compressed `conpot.json.1.gz`, open it as text, and produce nothing usable from
+it. Every line would land in `rejects` and a day of OT data would be absent from
+every figure without anything failing.
+
+So `nocompress` is set here, **and** `ingest.py` was taught to read `.gz`
+transparently on the same day. Both, deliberately: the setting because it is the
+simpler truth, and the code because a future change to this file — by anyone, for
+a perfectly good reason — must not be able to lose data. A comment asking to be
+remembered is not a control.
+
+Cowrie is deliberately **not** in that logrotate config. Twisted rotates its log
+itself, daily, producing `cowrie.json.YYYY-MM-DD`. Two mechanisms rotating one
+file is how a day of data goes missing.
+
+### Patching, and why the usual advice needed checking
+
+An internet-facing machine that stays up until December should be patched. The
+complication specific to this build is that `/etc/ufw/before.rules` is a
+distribution file: a `ufw` or kernel upgrade can replace it and silently remove
+the outbound block, which is why `decoy-status` re-checks that rule on every run.
+
+So the question is not "patch or not" but *does this particular set of updates
+touch the firewall path*. On 29 September 2026 the five pending updates were
+`apparmor`, `libapparmor1`, `dmidecode`, `libaudit-common` and `libaudit1` — no
+`ufw`, no kernel, no reboot required. Safe to apply.
+
+The generalisable part: **check what is in the update set rather than reasoning
+about updates in the abstract.** The risk here is real and specific, and it did
+not apply to these five. It will apply to some later set, and `decoy-status` is
+what will catch it.
+
 ## Known limitations
 
 **The fake user is Cowrie's default.** `/etc/passwd` in the imitation contains
