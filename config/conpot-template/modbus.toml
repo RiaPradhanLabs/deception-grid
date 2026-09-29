@@ -6,12 +6,23 @@
 enabled = true
 host = "0.0.0.0"
 
-# Still the default high port. Moving to 502 -- the real Modbus port, and the
-# whole basis of the OT comparison -- needs systemd socket activation, because
-# 502 is privileged and nothing here runs as root. That is a separate change
-# with its own unit file, and testing on 5020 first means a mistake in the
-# template is found before a privileged port is involved.
-port = 5020
+# 502 is Modbus/TCP's registered port and the whole basis of the OT comparison.
+# Everything was built and verified on 5020 first, so that a mistake in the
+# template was found before a privileged port was involved. That is now done --
+# vendor identity, wire addresses and register animation were all confirmed on
+# 5020 on 29 September 2026.
+#
+# 502 is privileged and nothing here runs as root. It is bound with
+# CAP_NET_BIND_SERVICE, granted by conpot.service. NOT with systemd socket
+# activation, which was the earlier plan and assumed an application feature
+# Conpot 1.0.0 has never been shown to have. See the long note in
+# config/conpot.service.
+#
+# Changing this number exposes nothing by itself. 502 is closed in both firewall
+# layers -- the Azure NSG and ufw -- and opening those is a separate, dated,
+# deliberate act: the OT door opens 6 October 2026. Binding it locally
+# beforehand is how the unit gets tested without exposure.
+port = 502
 
 # Left as "serial" despite this being Modbus/TCP. Counter-intuitive, and it was
 # the main risk in the build, so it was tested with raw MBAP-framed frames over
