@@ -533,7 +533,15 @@ Cowrie is deliberately **not** in that logrotate config. Twisted rotates its log
 itself, daily, producing `cowrie.json.YYYY-MM-DD`. Two mechanisms rotating one
 file is how a day of data goes missing.
 
-### Patching, and why the usual advice needed checking
+### Opening the door, on 6 October
+
+Everything on the decoy side is done and verified. The remaining work is two
+firewall layers and it is written out as a runbook —
+`docs/opening-the-ot-door.md` — because it will be done a week after the work it
+completes, and the failure modes are specific: a colliding NSG priority, ufw open
+with the NSG still shut, or opening it and confirming nothing actually arrived.
+
+## Patching, and why the usual advice needed checking
 
 An internet-facing machine that stays up until December should be patched. The
 complication specific to this build is that `/etc/ufw/before.rules` is a
