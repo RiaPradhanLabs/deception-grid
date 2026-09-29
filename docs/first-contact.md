@@ -103,11 +103,19 @@ separately: it is consistent with port enumeration, or with a bot whose later
 stages fail. Whatever it is, folding it into "login attempts" would overstate
 brute-force volume.
 
-## What it did not do — and why the first explanation was wrong
+## What it did — corrected twice on 29 September
 
-No payload was delivered. This note originally proposed that the imitation
-failed the `HISILICON` liveness check. **That was wrong, and the command log
-disproves it.** Corrected 29 September against four days of data.
+This section has been wrong twice, and both versions are recorded because the
+sequence is instructive.
+
+**Version one** said no payload was delivered, and proposed that the imitation
+had failed the `HISILICON` liveness check. **Version two** accepted that the
+liveness check had passed but still reported zero payloads, from a command list
+truncated at the fifteen most frequent. **Version three, below, is checked
+against the download events and the files on disk.** Payloads were delivered:
+259 of them, across 131 sessions, 104 distinct files, 74 MB.
+
+Corrected against four days of data.
 
 Cowrie records whether each command was accepted or rejected:
 
@@ -126,27 +134,49 @@ commands in Cowrie's emulated shell. Everything else was accepted. **The
 liveness check passed 1,471 times.** The bot learned the CPU architecture and
 was given a writable directory.
 
-So the drop-off is at the last step, not the first:
+### How many got how far
 
-| Stage | Sessions |
+| Stage reached | Sessions |
 |---|---|
 | Logged in and ran something | 1,473 |
 | Probed for command injection (`ping; sh`) | 984 |
 | Read its own binary for the CPU architecture | 493 |
 | Hunted for a writable directory | 488 |
-| **Fetched a payload** | **0** |
+| **Fetched a payload** | **131** |
 
-What this bounds is narrower than first claimed, and in a more useful way. The
-decoy captures the whole reconnaissance chain reliably — credential guessing,
-escalation attempts, architecture discovery, and the search for somewhere to
-write. What it does not capture is **delivery**, and the reason is now an open
-question rather than a settled one. Three candidates, none tested: the payload
-host was already offline, the bot's own next stage failed, or something later
-in the emulation gave the decoy away.
+Stage counts, not a strict funnel: different bot families take different routes,
+so the 131 are not all a subset of the 488. Read each row as "reached this
+stage", never "of those above".
 
-Worth resolving before December, because "what do they install" is a question
-an audience will ask, and the current answer is "we don't know, and here is
-exactly how far we got".
+Roughly **one session in eleven went the whole way**. The download events break
+down as 259 successful fetches across 131 sessions and 72 failures across 15
+more, producing **104 distinct files totalling 74 MB**, stored under their
+SHA-256 in `var/lib/cowrie/downloads/`. Separately, 14 sessions *pushed* 79
+files to the sensor over SCP rather than pulling them.
+
+The commands behind the downloads are worth reading in the log: they are
+architecture ladders. One script tries `net.x86_64`, `net.mips`, `net.mpsl`,
+`net.arm`, `net.arm5`, `net.arm6`, `net.arm7`, `net.ppc`, `net.m68k`, `net.sh4`,
+`net.spc`, `net.arc`, `net.i686`, `net.i486` in turn, each with `wget` and then
+`curl` as a fallback. The bot does not know what it has reached and does not
+care; it tries every build until one runs.
+
+### The thing this cost us
+
+Cowrie does not fake `wget`. It really fetched those files, which means the
+sensor opened **331 outbound connections to attacker-controlled hosts** between
+25 and 29 September. `docs/rules-of-engagement.md` said the project only ever
+receives and never connects back to an address in its own logs. Both statements
+were false for four days.
+
+This was found by checking the claim that no payload had been delivered. The
+download behaviour was turned off the same day, at the firewall rather than in
+configuration, and the whole episode is documented in
+`docs/rules-of-engagement.md` under *The outbound download problem*.
+
+So the answer to "what do they install" covers 25 to 29 September and stops
+there. The URLs continue to be logged; the binaries do not continue to arrive.
+That is a deliberate trade and the reasoning is written down.
 
 ## What this changes for the analysis
 
@@ -166,6 +196,12 @@ the two, and it was visible in the first four minutes.
 - **Credentials can contain null bytes** (`enable\x00`). They arrive as
   `\u0000` in the JSON and must reach the database unmangled. The raw line is
   retained so a parsing decision can be revisited.
+- **The command list was read truncated once, and it cost a finding.** A query
+  returning the fifteen most frequent commands showed no download command, and
+  that absence was reported as "no payload delivered". The download commands were
+  there, spread thinly across a dozen variants, none of them frequent enough to
+  reach a top-fifteen list. **An absence in a truncated result is not an
+  absence.** Check `LIMIT` before reporting a zero.
 - **Credential attribution: checked on 25 September.** Four of the six pairs
   are verbatim entries in the published Mirai credential table; two are not,
   and are more likely a parsing artefact — see above. The `HISILICON` and
@@ -185,7 +221,7 @@ places, which is the argument for doing it rather than asserting it.
 | **T1110.001** Password Guessing | The refused credential attempts | Verified. Not credential stuffing, which means breached username/password pairs, and not spraying, which means one password across many accounts |
 | **T1078.001** Valid Accounts: Default Accounts | `root/root` succeeding | Verified, and missing from the first draft. ATT&CK covers factory-set credentials on devices left unchanged after installation |
 | **T1082** System Information Discovery | `cat /proc/self/exe` | Verified as explicitly covering processor architecture |
-| **T1105** Ingress Tool Transfer | The payload that never arrived | Verified. Ours is *attempted and not observed completing* |
+| **T1105** Ingress Tool Transfer | 259 completed downloads, 104 distinct samples | Verified, and **observed completing** — corrected 29 September, having first been recorded as attempted but never completing |
 | **T1497** Virtualization/Sandbox Evasion | `/bin/busybox HISILICON` | Probable, page not read in full. The check exists to confirm a real device rather than an analysis environment |
 | **T1059.004** Unix Shell | `sh` / `shell` / `enable` / `system` | Sub-technique unverified; the parent T1059 is not in doubt |
 | **T1083** File and Directory Discovery | The writable-directory hunt | Unverified. Defensible, but no ATT&CK technique cleanly describes *testing whether a directory is writable* |
