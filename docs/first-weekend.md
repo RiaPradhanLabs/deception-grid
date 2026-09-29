@@ -232,23 +232,61 @@ Discovery, neither yet verified against the ATT&CK pages. Cowrie also recorded a
 **JA4H fingerprint** for each forwarded HTTP request, which is a
 client-identification artefact worth a line in the analysis.
 
-### Not yet examined: it may not have stopped on the 28th
+### Examined: it did not stop on the 28th, and there is no fourth source
 
-Forward-request events also appear with destination ports **443 and 2535** across
-the whole four days, not only in the three sessions tabulated above. 2535 is the
-third source's target already named; 443 is not accounted for anywhere in this
-note. So the three cases above are a sample rather than the set, and the
-behaviour probably did not stop on the 28th.
+Two questions were left open in an earlier version of this note: whether the
+forwarding attempts continued past 28 September, and whether ports 443 and 2535
+meant visitors beyond the three described above. Answered from the database on
+**29 September 2026, 17:25 UTC**.
 
-This is a lead and not a finding. The figures behind it were never re-derived —
-it was noticed late, after the three cases were written up, and it is recorded
-here only so that it survives the writing instead of being remembered.
+**It continued.** Forward-request events appear on every one of the four days —
+12, 12, 14 and 8 — and one source was still trying at **16:20 on 29 September**,
+while this note was being written.
 
-The query that settles it is standing: `analysis/weekly.sql` question 10,
-*attempts to use us as a proxy*, groups every `cowrie.direct-tcpip*` event by
-source and destination port. It answers three things this note does not — how
-many sources, over how long, and whether any request was ever anything other
-than refused. Every row must say discarded.
+**There is no fourth source.** Ports 80, 443 and 2535 map exactly onto the three
+sources already described. The earlier note read the port list as evidence of
+visitors we had not examined; it was the same three seen through a different
+lens. **The three cases are the set**, which is the opposite of what the lead
+suspected and is worth recording as such.
+
+| Source | Asked us to connect to | Forward requests | Sessions | First seen | Last seen |
+|---|---|---|---|---|---|
+| `171.243.149.238` | `ip-who.com:80` | 14 | 14 | 26 Sept 13:29 | 29 Sept 11:47 |
+| `193.46.255.86` | `62.210.131.144:2535` | 3 | 3 | 28 Sept 08:00 | 29 Sept 16:20 |
+| `94.154.43.234` | `ipv4.icanhazip.com:443` | 1 | 1 | 26 Sept 20:36 | 26 Sept 20:36 |
+
+**18 forward requests in total, from 3 sources, over 4 days.** An earlier version
+of this note said "fourteen times over three days" — that was one source's count
+mistaken for the total, and three days instead of four.
+
+**The first source was persistent, not incidental.** Fourteen separate requests
+across fourteen separate sessions over four days. It came back roughly four times
+a day to ask the same question.
+
+**Two of the three destinations are the same kind of thing.** `ip-who.com` and
+`ipv4.icanhazip.com` are both services that tell a caller its own public address.
+The second request is a TLS handshake, and the hostname is visible inside the
+encrypted-looking blob because the server name travels in clear text at the start
+of the negotiation — which is how we know what it was reaching for without being
+able to read the rest.
+
+**The third is not asking about itself.** `62.210.131.144:2535` is one specific
+machine on an unusual port. Notably it sent **no data at all** — three connection
+requests and nothing to forward, where the other two both sent payloads. A
+request with no payload is consistent with testing whether the relay works before
+using it.
+
+**Every request was discarded**, and the discard is logged with the payload it
+refused:
+
+```
+discarded direct-tcp forward request 0 to ip-who.com:80 with data
+b'GET /json/ HTTP/1.1\r\nHost: ip-who.com\r\n\r\n'
+```
+
+Cowrie also recorded a **JA4H fingerprint** for each forwarded HTTP request and a
+**JA4** fingerprint for the TLS one — client-identification artefacts that
+survive a change of address, and the most useful
 
 ## What they actually installed, and what finding out cost us
 
