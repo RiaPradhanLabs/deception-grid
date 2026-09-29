@@ -46,6 +46,17 @@ LOGIN_EVENTS = ('cowrie.login.success', 'cowrie.login.failed')
 # version of this rule tested for a real NUL byte and matched nothing at all.
 ESCAPED_BYTE = re.compile(r'\\x[0-9a-fA-F]{2}')
 
+# Console-escalation words. The distinction between a command and a password
+# is semantic, not syntactic: 'enable' and 'blender' are the same shape, and a
+# rule based on the escape alone excluded root/7ujMko0admin -- a real camera
+# default that happens to arrive with a trailing null.
+CONSOLE_WORDS = {'enable', 'system', 'shell', 'sh', 'linuxshell',
+                 'su', 'exit', 'quit', 'help'}
+
+
+def printable_part(value):
+    return ESCAPED_BYTE.sub('', value or '').replace('\ufeff', '').strip()
+
 
 def now():
     """UTC, to the second. Everything in this project is UTC."""
@@ -74,21 +85,42 @@ def load_own_addresses(path):
 def exclusion_reason(event, own):
     """Why this row must not count, or None if it counts.
 
-    Exactly three reasons, and no others:
+    Four reasons, and no others:
 
-      loopback  our own local testing, from 127.0.0.1.
-      analyst   a session from one of our own addresses.
-      artefact  a 'login attempt' that is not one. Cowrie's telnet handler
-                sometimes reads a stream of commands as login input and
-                records it as a username/password pair. Those carry an
-                escape for a non-printable byte, written as literal text;
-                a credential somebody actually typed does not. The rule is
-                the escape rather than a list of the pairs we happen to
-                have seen, so it also catches variants we have not seen.
+      loopback          our own local testing, from 127.0.0.1.
+      analyst           a session from one of our own addresses.
+      artefact-command  a 'login attempt' that is not one. Cowrie's telnet
+                        handler sometimes reads a stream of commands as login
+                        input and records it as a username/password pair.
+      artefact-binary   a login row whose fields are non-printable bytes with
+                        no readable content at all.
 
-    Anything else counts. If a fourth reason is ever added, it goes here and
-    it goes in the documentation, because the exclusion list is part of the
-    result and not an implementation detail.
+    Anything else counts. If a fifth reason is ever added, it goes here and it
+    goes in the documentation, because the exclusion list is part of the result
+    and not an implementation detail.
+
+    The artefact rule took three attempts and the failures are the argument for
+    how it is written now.
+
+    Version one tested for a real NUL byte in either field and matched NOTHING,
+    because Cowrie writes a non-printable byte as the literal text of a C escape
+    -- the four characters \\, x, 0, 0. Verified against the database rather than
+    assumed: hex(username) for the commonest pair is 656E61626C655C783030, which
+    is "enable" followed by 5C 78 30 30. Caught because this function's output is
+    printed on every run and the excluded list came back empty.
+
+    Version two matched any \\xNN escape, and over-corrected. It threw out
+    root/7ujMko0admin, root/founder88, root/blender and telnetadmin/telnetadmin
+    -- real credential attempts that happen to arrive with a trailing null.
+    7ujMko0admin is a well-known camera default. Caught by reading the excluded
+    rows instead of trusting the total.
+
+    Version three, below, accepts that the distinction is SEMANTIC and not
+    syntactic: 'enable' and 'blender' are the same shape to any pattern, so only
+    a list of console words separates a command from a password. An escape alone
+    is not enough; what is left after the escapes are stripped has to be a
+    console word, or empty, or unreadable. Tested against all 18 distinct cases
+    observed in the first four days.
     """
     src = event.get('src_ip')
     if src == '127.0.0.1':
@@ -96,9 +128,20 @@ def exclusion_reason(event, own):
     if src in own:
         return 'analyst'
     if event.get('eventid') in LOGIN_EVENTS:
-        for field in ('username', 'password'):
-            if ESCAPED_BYTE.search(event.get(field) or ''):
-                return 'artefact'
+        user, pw = event.get('username'), event.get('password')
+        su, sp = printable_part(user), printable_part(pw)
+        if ESCAPED_BYTE.search(user or '') or ESCAPED_BYTE.search(pw or ''):
+            u_cmd = su.lower() in CONSOLE_WORDS or su.startswith('/bin/')
+            p_cmd = sp.lower() in CONSOLE_WORDS or sp.startswith('/bin/') or sp == ''
+            if u_cmd and p_cmd:
+                return 'artefact-command'
+            if not su or not sp:
+                return 'artefact-command'
+        for stripped, raw in ((su, user), (sp, pw)):
+            if raw and not stripped:
+                return 'artefact-binary'
+            if stripped and not all(32 <= ord(c) < 127 for c in stripped):
+                return 'artefact-binary'
     return None
 
 
@@ -151,7 +194,7 @@ def report(db):
     print('=== excluded as an artefact, so the rule can be checked ===')
     rows = list(db.execute(
         "SELECT username, password, COUNT(*) FROM events "
-        "WHERE excluded = 'artefact' GROUP BY 1, 2 ORDER BY 3 DESC"))
+        "WHERE excluded LIKE 'artefact%' GROUP BY 1, 2 ORDER BY 3 DESC"))
     if not rows:
         print('    none')
     for u, p, n in rows:
