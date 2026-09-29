@@ -22,16 +22,53 @@ protocols = ["modbus"]
 creator = "deception-grid"
 
 [core.databus.key_value_mappings]
-# Still the shipped static values: four blocks of eight zeroes. Animating them
-# is the next change and is deliberately not guessed at here -- the register
-# contents need a databus function that exists in this build of Conpot, and
-# inventing a plausible-looking import path is how the last four errors on this
-# project happened.
+# Was four static expressions: value = "[0 for b in range(0,8)]".
 #
-# A controller whose registers never change is not controlling anything, so this
-# has to be fixed before the OT door opens on 6 October.
-memoryModbusSlave1BlockA = { value = "[0 for b in range(0,8)]" }
-memoryModbusSlave1BlockB = { value = "[0 for b in range(0,8)]" }
-memoryModbusSlave1BlockC = { value = "[0 for b in range(0,8)]" }
-memoryModbusSlave1BlockD = { value = "[0 for b in range(0,8)]" }
+# core/databus.py evaluates a `value` expression ONCE, at initialisation, and
+# stores the result. So every register on an unmodified Conpot reads zero for
+# the life of the process, and a controller whose registers never move is not
+# controlling anything.
+#
+# The one-line fix does not work. databus.py imports `random` at module level
+# with the comment "this is needed because we use it in template value
+# expressions", so value = "[random.randint(0,100) for b in range(0,8)]" is
+# legal -- and is still evaluated once. The registers come out non-zero and then
+# never move again. That looks fixed and is not, which makes it worse than the
+# zeroes.
+#
+# Animation is possible only through `function`, because databus.get_value()
+# checks the stored object for a get_value attribute and calls it on EVERY
+# lookup. Nothing shipped in Conpot 1.0.0 is usable for these four blocks:
+#
+#   misc.random.Random8BitRegisters   right shape for the two bit blocks, wrong
+#                                     behaviour -- fresh random per read means
+#                                     all eight outputs flip on every poll.
+#   misc.random.Random16bitRegister   returns a list of ONE value, in range 0-1.
+#                                     Our register blocks are eight 16-bit
+#                                     words. Wrong length, meaningless range.
+#   misc.sysinfo.*                    report the HOST's real CpuLoad, TotalRam,
+#                                     BytesSent and LocalIP. They exist for the
+#                                     SNMP template; wiring one here would
+#                                     publish this VM's private address and
+#                                     traffic counters in a Modbus register.
+#
+# So the four blocks point at our own module. See
+# emulators/deception_grid/plant.py for the plant scenario, the scaling, and why
+# every value derives from wall-clock time rather than from call count.
+#
+# REQUIRES PYTHONPATH=/home/conpot/emulators on the Conpot process, because that
+# module deliberately does not live in site-packages. Without it Conpot exits at
+# startup with ModuleNotFoundError -- which is the failure to prefer: loud,
+# immediate, and impossible to mistake for a decoy that is working.
+memoryModbusSlave1BlockA = { function = "deception_grid.plant.PlantCoils" }
+memoryModbusSlave1BlockB = { function = "deception_grid.plant.PlantDiscreteInputs" }
+memoryModbusSlave1BlockC = { function = "deception_grid.plant.PlantInputRegisters" }
+memoryModbusSlave1BlockD = { function = "deception_grid.plant.PlantHoldingRegisters" }
+
+# Left exactly as shipped. Worth being clear about what this is, because an
+# earlier note in docs/build.md said PlcScanCycle was "configured to animate
+# [the registers] and does not". That was wrong. plc_scan is its own databus
+# key; no block's `content` field points at it, so it was never connected to the
+# registers in the first place. The registers were static because they were
+# declared static.
 plc_scan = { function = "conpot.emulators.plc.scan_cycle.PlcScanCycle" }
