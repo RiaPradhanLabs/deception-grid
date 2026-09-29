@@ -1,0 +1,72 @@
+[Unit]
+Description=Conpot Modbus/TCP OT honeypot
+After=network.target
+
+[Service]
+User=conpot
+Group=conpot
+Restart=always
+RestartSec=5
+
+# --- Binding port 502 without root -------------------------------------------
+#
+# Modbus/TCP's registered port is 502. It is privileged, and nothing in this
+# project runs as root.
+#
+# The plan recorded earlier in this build was systemd socket activation, the
+# same mechanism Cowrie uses for 22 and 23. That was an ASSUMPTION and it is
+# withdrawn. Cowrie supports inherited sockets explicitly -- cowrie.cfg refers
+# to them by index -- and nothing establishes that Conpot 1.0.0 does. Building
+# on an unverified application feature is how several errors on this project
+# started.
+#
+# CAP_NET_BIND_SERVICE needs no support from Conpot at all. It grants exactly
+# one capability -- bind a port below 1024 -- and nothing else. The process
+# still runs as the conpot user with no other privilege, and the bounding set
+# below means it cannot acquire any.
+#
+# The third option, redirecting 502 to 5020 with a firewall rule, was rejected
+# on analysis grounds rather than security ones: the logged dst_port would
+# become 5020, and the whole comparison in this project is IT door against OT
+# door by dst_port. The port a scanner knocked on IS the finding.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+
+# --- PYTHONPATH is not optional ----------------------------------------------
+#
+# The template's four Modbus blocks are animated by deception_grid.plant, which
+# lives outside site-packages so that an upgrade cannot delete it. Without this
+# line Conpot exits at startup with ModuleNotFoundError. Loud, which is the
+# failure to prefer.
+Environment=PYTHONPATH=/home/conpot/emulators
+WorkingDirectory=/home/conpot
+ExecStart=/home/conpot/conpot-env/bin/conpot -c /home/conpot/conpot.cfg -t /home/conpot/templates/plant-plc -l /home/conpot/log/conpot.log --temp_dir /home/conpot/tmp
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=conpot
+
+# --- Hardening ---------------------------------------------------------------
+#
+# Conpot needs to write two directories and nothing else. Everything here is
+# reversible and each line is a separate failure mode, so if the service will
+# not start, comment this whole block out FIRST and confirm it starts, rather
+# than changing several things at once.
+#
+# ProtectHome=read-only with ReadWritePaths under /home/conpot is deliberate:
+# the decoy can read its own configuration and template, write its log and temp
+# directory, and touch nothing else in any home directory -- including
+# /home/cowrie, which holds live malware samples.
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/conpot/log /home/conpot/tmp
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
