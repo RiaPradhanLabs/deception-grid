@@ -1,21 +1,30 @@
 #!/bin/bash
 # decoy-status - one screen telling you whether the collection is alive.
 # The failures that matter here are silent, so this prints the things that
-# would be quietly wrong: service down, events stopped, disk full, and the
-# outbound block gone.
+# would be quietly wrong: a service down, events stopped, disk full, the
+# outbound block gone, or a decoy answering but recording nothing.
 #
 # Lives at /usr/local/bin/decoy-status, mode 755, root-owned.
-# Needs sudo: the Cowrie log sits in another user's home, and the firewall
-# check reads iptables.
+# Needs sudo: the decoy logs sit in other users' homes, and the firewall check
+# reads iptables.
+#
+# Two decoys since 29 September 2026. A version of this script that knew only
+# about Cowrie would report "all well" with the OT decoy dead, which is the
+# exact class of failure it exists to catch -- so every section below names
+# which decoy it is talking about.
 set -u
 
-LOGDIR=/home/cowrie/cowrie/var/log/cowrie
+COWRIE_LOGDIR=/home/cowrie/cowrie/var/log/cowrie
 DOWNLOADS=/home/cowrie/cowrie/var/lib/cowrie/downloads
-COWRIE_UID=1001
+CONPOT_LOG=/home/conpot/log/conpot.json
 
-# Outbound connections were blocked on 29 September 2026 at about 12:00 UTC.
-# The last file Cowrie fetched over the network was at 08:51 that morning, so
-# any url-bearing download after this cutoff means the block has failed.
+COWRIE_UID=1001
+CONPOT_UID=1002
+
+# Outbound connections were blocked on 29 September 2026 at about 12:00 UTC
+# for cowrie, and extended to conpot at about 15:30 the same day. The last file
+# Cowrie fetched over the network was at 08:51 that morning, so any url-bearing
+# download after this cutoff means the block has failed.
 # See docs/rules-of-engagement.md, "The outbound download problem".
 BLOCK_CUTOFF=2026-09-29T12:00
 #
@@ -28,72 +37,34 @@ BLOCK_CUTOFF=2026-09-29T12:00
 # field: present means Cowrie went and got it, absent means the attacker
 # supplied the bytes.
 
+# The date the OT door opens. Before it, an empty OT log is CORRECT -- port 502
+# is closed in the Azure NSG and in ufw, and only our own loopback testing
+# reaches Conpot. After it, an empty OT log is a fault. Without this date the
+# same observation cannot be read either way.
+OT_OPEN=2026-10-06
+TODAY=$(date -u '+%Y-%m-%d')
+
 echo
 echo "  decoy-01 status - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+# ======================================================================
 echo
+echo "  IT DECOY - Cowrie, ports 22 and 23"
 
 if systemctl is-active --quiet cowrie.service; then
-  echo "  service      running"
+  echo "    service    running"
 else
-  echo "  service      NOT RUNNING"
+  echo "    service    *** NOT RUNNING ***"
 fi
 
-# --- the outbound block -------------------------------------------------
-# A ufw or kernel package upgrade can replace before.rules and silently drop
-# this rule. Silently is the problem, so it gets checked on every status read.
-if iptables -L ufw-before-output -n 2>/dev/null \
-     | grep -q "owner UID match ${COWRIE_UID}"; then
-  echo "  outbound     blocked for cowrie (uid ${COWRIE_UID})"
-else
-  echo "  outbound     *** BLOCK MISSING - the decoy can reach out ***"
-  echo "               re-add the rule in /etc/ufw/before.rules and ufw reload"
-  echo "               see docs/build.md, 'Stopping the decoys reaching out'"
-fi
-
-# Second, independent canary: the rule could be present but ineffective.
-# Reading the rule is intent; counting fetches after the cutoff is evidence.
-python3 - "$LOGDIR" "$BLOCK_CUTOFF" <<'PY'
-import glob, json, os, sys
-
-logdir, cutoff = sys.argv[1], sys.argv[2]
-fetched_after, hosts = 0, set()
-for path in sorted(glob.glob(os.path.join(logdir, 'cowrie.json*'))):
-    with open(path, errors='replace') as fh:
-        for line in fh:
-            if 'file_download' not in line:
-                continue
-            try:
-                e = json.loads(line)
-            except ValueError:
-                continue
-            if e.get('eventid') != 'cowrie.session.file_download':
-                continue
-            url = e.get('url')
-            if url and e.get('timestamp', '') >= cutoff:
-                fetched_after += 1
-                hosts.add(url.split('/')[2] if '//' in url else url)
-
-if fetched_after:
-    print("  fetches      *** %d NETWORK FETCHES SINCE THE BLOCK ***" % fetched_after)
-    print("               from %s" % ', '.join(sorted(hosts))[:120])
-    print("               the outbound block is not holding -- see docs/build.md")
-else:
-    print("  fetches      none since the block went in (correct)")
-PY
-
-if [ -d "$DOWNLOADS" ]; then
-  n=$(find "$DOWNLOADS" -maxdepth 1 -type f ! -name '.gitignore' | wc -l)
-  echo "  captured     $n files held (fetched, pushed over scp, and redirections)"
-fi
-
-# --- the log ------------------------------------------------------------
 # Cowrie rotates daily: cowrie.json is today, cowrie.json.YYYY-MM-DD the rest.
 # An earlier version of this script read cowrie.json alone and reported one
-# day's figures as though they were the whole collection.
-files=$(ls -1 "$LOGDIR"/cowrie.json* 2>/dev/null | wc -l)
+# day's figures as though they were the whole collection. That mistake cost
+# 14,845 events against an actual 201,234, and 93 sources against 967.
+files=$(ls -1 "$COWRIE_LOGDIR"/cowrie.json* 2>/dev/null | wc -l)
 if [ "$files" -gt 0 ]; then
-  echo "  log files    $files"
-  python3 - "$LOGDIR" <<'PY'
+  echo "    log files  $files"
+  python3 - "$COWRIE_LOGDIR" <<'PY'
 import datetime, glob, json, os, sys
 
 newest, events, sources, unreadable = None, 0, set(), 0
@@ -119,24 +90,170 @@ if newest:
     ts = datetime.datetime.strptime(newest[:19], '%Y-%m-%dT%H:%M:%S') \
                           .replace(tzinfo=datetime.timezone.utc)
     gap = (datetime.datetime.now(datetime.timezone.utc) - ts).total_seconds()
-    print("  last event   %s  (%d min ago)"
+    print("    last event %s  (%d min ago)"
           % (newest[:19].replace('T', ' '), gap // 60))
     if gap > 86400:
-        print("  WARNING      no events for over 24 hours")
+        print("    WARNING    no IT events for over 24 hours")
 
-print("  events       %d across all files" % events)
-print("  sources      %d distinct, loopback excluded" % len(sources))
+print("    events     %d across all files" % events)
+print("    sources    %d distinct, loopback excluded" % len(sources))
 if unreadable:
-    print("  WARNING      %d log lines would not parse" % unreadable)
+    print("    WARNING    %d log lines would not parse" % unreadable)
 PY
 else
-  echo "  log files    NONE FOUND in $LOGDIR"
+  echo "    log files  *** NONE FOUND in $COWRIE_LOGDIR ***"
 fi
 
-echo "  disk         $(df -h / | awk 'NR==2 {print $5" used of "$2}')"
-echo "  uptime       $(uptime -p)"
+if [ -d "$DOWNLOADS" ]; then
+  n=$(find "$DOWNLOADS" -maxdepth 1 -type f ! -name '.gitignore' | wc -l)
+  echo "    captured   $n files held (fetched, pushed over scp, and redirections)"
+fi
+
+# ======================================================================
 echo
-echo "  distinct sources here is a rough count straight off the log and will"
-echo "  differ slightly from ingest.py, which also excludes the analyst's own"
+echo "  OT DECOY - Conpot, Modbus 502"
+
+if systemctl is-active --quiet conpot.service; then
+  echo "    service    running"
+else
+  echo "    service    *** NOT RUNNING ***"
+fi
+
+# Binding 502 needs CAP_NET_BIND_SERVICE, granted by conpot.service. If that
+# directive is ever lost the service starts and fails to bind, so the port is
+# checked rather than assumed. Port 5020 is reported too: seeing it means an
+# older modbus.toml is in place and the OT door is not where the analysis
+# believes it is.
+if ss -tln 2>/dev/null | grep -q ':502 '; then
+  echo "    listening  0.0.0.0:502  (the real Modbus port)"
+elif ss -tln 2>/dev/null | grep -q ':5020 '; then
+  echo "    listening  *** 5020, NOT 502 - modbus.toml is the old one ***"
+else
+  echo "    listening  *** NOTHING on 502 - check CAP_NET_BIND_SERVICE ***"
+fi
+
+# Whether the door is actually open. ufw is checkable from here; the Azure NSG
+# is not, and BOTH must allow 502 for external traffic to arrive. A green ufw
+# line with the NSG still closed looks like an open door and is not one.
+if ufw status 2>/dev/null | grep -qE '^502(/tcp)? +ALLOW'; then
+  echo "    ufw        502 ALLOW  (NSG must also allow it - check in Azure)"
+else
+  echo "    ufw        502 closed"
+fi
+
+# The silent failure this decoy is most prone to: answering Modbus perfectly and
+# writing nothing. conpot.cfg ships with [json] disabled and a path the conpot
+# user cannot write.
+if [ -f "$CONPOT_LOG" ]; then
+  lines=$(wc -l < "$CONPOT_LOG")
+  echo "    log        $lines records in $(basename "$CONPOT_LOG")"
+  python3 - "$CONPOT_LOG" "$OT_OPEN" "$TODAY" <<'PY'
+import datetime, json, sys
+
+path, ot_open, today = sys.argv[1], sys.argv[2], sys.argv[3]
+newest, external, unreadable = None, set(), 0
+with open(path, errors='replace') as fh:
+    for line in fh:
+        if not line.strip():
+            continue
+        try:
+            e = json.loads(line)
+        except ValueError:
+            unreadable += 1
+            continue
+        ip = e.get('src_ip')
+        if ip and ip != '127.0.0.1':
+            external.add(ip)
+        t = e.get('event_time')
+        if t and (newest is None or t > newest):
+            newest = t
+
+if newest:
+    print("    last event %s" % newest[:19].replace('T', ' '))
+print("    sources    %d external, loopback excluded" % len(external))
+if unreadable:
+    print("    WARNING    %d OT log lines would not parse" % unreadable)
+
+# The same observation means opposite things either side of the opening date.
+if today < ot_open:
+    if external:
+        print("    NOTE       external traffic BEFORE %s - 502 should still be"
+              % ot_open)
+        print("               closed in both firewall layers. Check the NSG.")
+    else:
+        print("    NOTE       no external traffic yet, which is correct:")
+        print("               the OT door opens %s" % ot_open)
+elif not external:
+    print("    WARNING    OT door open since %s and no external traffic at all."
+          % ot_open)
+    print("               Check the NSG and ufw before concluding it is quiet.")
+PY
+else
+  echo "    log        *** $CONPOT_LOG MISSING ***"
+  echo "               conpot.cfg ships with [json] disabled and an unwritable"
+  echo "               path. A decoy that answers and records nothing is the"
+  echo "               worst outcome available. See docs/build.md."
+fi
+
+# ======================================================================
+echo
+echo "  OUTBOUND BLOCK - neither decoy may initiate a connection"
+
+# A ufw or kernel package upgrade can replace before.rules and silently drop
+# these rules. Silently is the problem, so they are checked on every read.
+# Both uids, separately: the rule covered cowrie alone for four hours after
+# Conpot was installed, and nothing complained.
+for pair in "cowrie:${COWRIE_UID}" "conpot:${CONPOT_UID}"; do
+  name=${pair%%:*}
+  uid=${pair##*:}
+  if iptables -L ufw-before-output -n 2>/dev/null \
+       | grep -q "owner UID match ${uid}"; then
+    printf '    %-10s blocked (uid %s)\n' "$name" "$uid"
+  else
+    printf '    %-10s *** BLOCK MISSING - this decoy can reach out ***\n' "$name"
+    echo "               re-add the rule in /etc/ufw/before.rules and ufw reload"
+    echo "               see docs/build.md, 'Stopping the decoys reaching out'"
+  fi
+done
+
+# Independent canary: a rule can be present and ineffective. Reading the rule
+# is intent; counting fetches after the cutoff is evidence.
+python3 - "$COWRIE_LOGDIR" "$BLOCK_CUTOFF" <<'PY'
+import glob, json, os, sys
+
+logdir, cutoff = sys.argv[1], sys.argv[2]
+fetched_after, hosts = 0, set()
+for path in sorted(glob.glob(os.path.join(logdir, 'cowrie.json*'))):
+    with open(path, errors='replace') as fh:
+        for line in fh:
+            if 'file_download' not in line:
+                continue
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if e.get('eventid') != 'cowrie.session.file_download':
+                continue
+            url = e.get('url')
+            if url and e.get('timestamp', '') >= cutoff:
+                fetched_after += 1
+                hosts.add(url.split('/')[2] if '//' in url else url)
+
+if fetched_after:
+    print("    fetches    *** %d NETWORK FETCHES SINCE THE BLOCK ***" % fetched_after)
+    print("               from %s" % ', '.join(sorted(hosts))[:120])
+    print("               the outbound block is not holding -- see docs/build.md")
+else:
+    print("    fetches    none since the block went in (correct)")
+PY
+
+# ======================================================================
+echo
+echo "  HOST"
+echo "    disk       $(df -h / | awk 'NR==2 {print $5" used of "$2}')"
+echo "    uptime     $(uptime -p)"
+echo
+echo "  Source counts here are rough, straight off the logs, and will differ"
+echo "  slightly from ingest.py, which also excludes the analyst's own"
 echo "  addresses. ingest.py is the figure to quote."
 echo
