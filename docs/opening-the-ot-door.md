@@ -88,6 +88,28 @@ sudo ufw status numbered | grep -E '502|62222|22|23'
 The comment carries the opening timestamp into the firewall itself, so the date
 survives even if the documents do not.
 
+## Step 3b — deploy the updated `decoy-status`, and not before now
+
+`decoy-status` holds the opening date in `OT_OPEN`, and uses it to decide whether
+"no external traffic" is the correct answer or a fault. The copy on the sensor
+still says the door is not open yet.
+
+Deploy it **after** step 3, never before. Installed while the firewalls were
+still shut, it would report the door as open with no traffic and warn about it —
+a false alarm on the one tool whose job is to not cry wolf.
+
+```
+sudo curl -fsS -H 'Cache-Control: no-cache' -o /usr/local/bin/decoy-status "https://raw.githubusercontent.com/RiaPradhanLabs/deception-grid/main/scripts/decoy-status?v=$(date +%s)"
+sudo chown root:root /usr/local/bin/decoy-status
+sudo chmod 755 /usr/local/bin/decoy-status
+sudo bash -n /usr/local/bin/decoy-status && echo "syntax OK"
+sudo decoy-status | sed -n '/OT DECOY/,/^$/p'
+```
+
+Expect `ufw 502 ALLOW` and, until the first visitor arrives, a line saying the
+door is open and nothing has come yet. That is correct for the first few hours
+and becomes worth investigating if it is still true after a day.
+
 ## Step 4 — prove it end to end, from outside
 
 From PowerShell on the laptop — this is the only test that crosses both layers:
