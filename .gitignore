@@ -23,6 +23,7 @@ state.json
 id_ed25519*
 id_rsa*
 analysis/exclude-ips.txt
+exclude-ips.txt
 
 # Python
 __pycache__/
