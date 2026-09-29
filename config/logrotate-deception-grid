@@ -1,0 +1,48 @@
+# /etc/logrotate.d/deception-grid
+#
+# Conpot does not rotate its own logs. Checked rather than assumed on
+# 29 September 2026: there is no RotatingFileHandler or TimedRotating anywhere in
+# the installed package, and no logrotate config shipped for it. It opens
+# conpot.json and conpot.log with a plain file handler and writes to them until
+# something stops it.
+#
+# Cowrie is NOT listed here on purpose. Twisted rotates its log itself, daily,
+# producing cowrie.json.YYYY-MM-DD. Adding logrotate on top would give two
+# mechanisms rotating one file, which is how a day of data goes missing.
+
+/home/conpot/log/conpot.json
+/home/conpot/log/conpot.log
+{
+    daily
+    rotate 30
+    missingok
+    notifempty
+    su conpot conpot
+    create 0664 conpot conpot
+
+    # NOT compressed, and this is load-bearing.
+    #
+    # analysis/ingest.py globs conpot.json* and would pick up a rotated
+    # conpot.json.1 correctly. A compressed conpot.json.1.gz would also match the
+    # glob, and be opened as text -- producing nothing useful, silently, which is
+    # this project's least favourite failure mode.
+    #
+    # ingest.py was taught to read .gz on the same day as a second line of
+    # defence, so compression here would no longer break it. Both are kept:
+    # the setting because it is the simpler truth, and the code because a future
+    # change to this file must not be able to lose data.
+    nocompress
+
+    # copytruncate, not a rename.
+    #
+    # Conpot holds the file open and has no way to be told to reopen it. A plain
+    # rename would leave it writing happily into the rotated file, and
+    # conpot.json would sit at zero bytes while the decoy appeared healthy --
+    # decoy-status would report "0 records" and be right.
+    #
+    # The cost of copytruncate is that a line being written at the instant of
+    # rotation can be lost. One line a day, at 00:00, against a decoy whose whole
+    # point is volume. The alternative is restarting Conpot on every rotation,
+    # which drops live sessions and puts a gap in the collection every night.
+    copytruncate
+}
