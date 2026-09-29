@@ -21,8 +21,7 @@ SELECT id,
 .print === 2. Headline figures. Lead with distinct sources, never events ===
 SELECT (SELECT COUNT(DISTINCT src_ip) FROM v_events
           WHERE src_ip IS NOT NULL)                          AS distinct_sources,
-       (SELECT COUNT(*) FROM v_events
-          WHERE eventid = 'cowrie.session.connect')           AS connections,
+       (SELECT COUNT(*) FROM v_arrivals)                      AS arrivals_both_doors,
        (SELECT COUNT(*) FROM v_logins)                        AS password_attempts,
        (SELECT COUNT(*) FROM v_logins WHERE ok = 1)           AS successes,
        (SELECT COUNT(DISTINCT src_ip) FROM v_logins
@@ -39,24 +38,27 @@ SELECT COALESCE(excluded, '(counts)') AS reason,
  ORDER BY 2 DESC;
 
 .print
-.print === 4. Arrivals per door. Connections, not events ===
-SELECT dst_port,
-       COUNT(*)                       AS connections,
+.print === 4. Arrivals per door. Arrivals, not events ===
+-- v_arrivals, not v_events: it counts BOTH doors. An earlier version of this
+-- query filtered on cowrie.session.connect alone and would have reported the OT
+-- door as having no traffic at all.
+SELECT door,
+       dst_port,
+       COUNT(*)                       AS arrivals,
        COUNT(DISTINCT src_ip)         AS distinct_sources
-  FROM v_events
- WHERE eventid = 'cowrie.session.connect'
- GROUP BY 1
- ORDER BY 2 DESC;
+  FROM v_arrivals
+ GROUP BY 1, 2
+ ORDER BY 3 DESC;
 
 .print
-.print === 5. Arrivals per day. Is the rate changing? ===
+.print === 5. Arrivals per day, per door. Is the rate changing? ===
 SELECT substr(ts, 1, 10)              AS day,
-       COUNT(*)                       AS connections,
+       door,
+       COUNT(*)                       AS arrivals,
        COUNT(DISTINCT src_ip)         AS distinct_sources
-  FROM v_events
- WHERE eventid = 'cowrie.session.connect'
- GROUP BY 1
- ORDER BY 1;
+  FROM v_arrivals
+ GROUP BY 1, 2
+ ORDER BY 1, 2;
 
 .print
 .print === 6. Most-tried credentials ===
@@ -78,14 +80,17 @@ SELECT username, password,
 
 .print
 .print === 8. Busiest sources by ARRIVALS, not by events ===
+-- group_concat(DISTINCT door) shows anyone who tried BOTH doors from one
+-- address. That is the single most interesting row this project can produce, so
+-- it must not be hidden by counting the doors separately.
 SELECT src_ip,
-       COUNT(*)                   AS connections,
+       group_concat(DISTINCT door) AS doors,
+       COUNT(*)                   AS arrivals,
        substr(MIN(ts), 1, 16)     AS first_seen,
        substr(MAX(ts), 1, 16)     AS last_seen
-  FROM v_events
- WHERE eventid = 'cowrie.session.connect'
+  FROM v_arrivals
  GROUP BY 1
- ORDER BY 2 DESC
+ ORDER BY 3 DESC
  LIMIT 10;
 
 .print
@@ -126,7 +131,29 @@ SELECT substr(seen, 1, 16) AS seen, why, substr(line, 1, 60) AS line_start
  LIMIT 10;
 
 .print
-.print === 12. Files: fetched by us, or supplied by them? ===
+.print === 12. Login rows that contain an escape and still count ===
+-- The audit trail for the artefact rule. Every row here carries a \xNN escape
+-- and was judged a REAL attempt anyway, so this is the list to read when asking
+-- whether the rule is too permissive -- the counterpart to query 3, which shows
+-- what it threw out.
+--
+-- Read it rather than trusting the total. Two of the three versions of that rule
+-- were wrong, and both were caught by looking at rows instead of counts.
+--
+-- Anything that looks like terminal control -- values beginning '[A', '[B', '[C'
+-- or '[' followed by a digit -- is the known limitation recorded in ingest.py
+-- and has never yet appeared. If it shows up here, the rule gains a case with
+-- evidence behind it.
+SELECT username, password, COUNT(*) AS rows_
+  FROM v_events
+ WHERE eventid IN ('cowrie.login.success', 'cowrie.login.failed')
+   AND (username LIKE '%\x%' OR password LIKE '%\x%')
+ GROUP BY 1, 2
+ ORDER BY 3 DESC
+ LIMIT 20;
+
+.print
+.print === 13. Files: fetched by us, or supplied by them? ===
 -- This distinction produced five wrong figures on 29 September 2026 and is the
 -- reason this query exists. Cowrie logs three different things under the single
 -- eventid cowrie.session.file_download. Only a `url` means an outbound fetch:
@@ -159,9 +186,69 @@ SELECT CASE
  ORDER BY 2 DESC;
 
 .print
-.print === 13. Registration country of the busiest sources ===
+.print === 14. The OT door: has anything arrived, and what did it ask for? ===
+-- Empty is the CORRECT answer before 6 October 2026: port 502 is closed in both
+-- firewall layers until then, and our own localhost testing is excluded as
+-- loopback. Empty AFTER that date means either nothing arrived or the decoy
+-- stopped recording, and those are different problems -- check query 1 and
+-- `systemctl is-active conpot` before concluding anything.
+SELECT event,
+       COUNT(*)                   AS events,
+       COUNT(DISTINCT session)    AS sessions,
+       COUNT(DISTINCT src_ip)     AS sources,
+       substr(MIN(ts), 1, 16)     AS first_seen,
+       substr(MAX(ts), 1, 16)     AS last_seen
+  FROM v_ot
+ GROUP BY 1
+ ORDER BY 2 DESC;
+
+.print
+.print === 15. OT: which Modbus function codes were requested ===
+-- The finding is WHAT was asked for, not that a connection happened. Function 3
+-- or 4 is a read: reconnaissance. Function 5, 6, 15 or 16 is a WRITE -- an
+-- attempt to change a coil or a register, which on real plant is an attempt to
+-- operate it. Function 43 is Read Device Identification: vendor fingerprinting.
+SELECT function_code,
+       CASE function_code
+         WHEN  1 THEN 'read coils'
+         WHEN  2 THEN 'read discrete inputs'
+         WHEN  3 THEN 'read holding registers'
+         WHEN  4 THEN 'read input registers'
+         WHEN  5 THEN 'WRITE single coil'
+         WHEN  6 THEN 'WRITE single register'
+         WHEN 15 THEN 'WRITE multiple coils'
+         WHEN 16 THEN 'WRITE multiple registers'
+         WHEN 43 THEN 'read device identification'
+         ELSE        'other / unhandled'
+       END                        AS meaning,
+       COUNT(*)                   AS requests,
+       COUNT(DISTINCT src_ip)     AS sources
+  FROM v_ot
+ WHERE function_code IS NOT NULL
+ GROUP BY 1, 2
+ ORDER BY 3 DESC;
+
+.print
+.print === 16. The comparison this project exists to make: IT door vs OT door ===
+-- One machine, one address, two doors. Quote distinct sources, never events.
+-- The denominators differ: the IT door has been open since 25 September, the OT
+-- door opens 6 October. State both dates alongside this table, or it reads as a
+-- like-for-like count when it is not.
+SELECT CASE WHEN eventid LIKE 'conpot.%' THEN 'OT  (Modbus)'
+            ELSE 'IT  (SSH/telnet)' END       AS door,
+       COUNT(DISTINCT src_ip)                 AS distinct_sources,
+       COUNT(DISTINCT session)                AS sessions,
+       COUNT(*)                               AS events,
+       substr(MIN(ts), 1, 10)                 AS first_day,
+       substr(MAX(ts), 1, 10)                 AS last_day
+  FROM v_events
+ GROUP BY 1
+ ORDER BY 2 DESC;
+
+.print
+.print === 17. Registration country of the busiest sources ===
 -- Needs geo.sqlite, built by ./geo-lookup.sh. If that file does not exist yet
--- this query reports "no such table: g.geo" and stops there; queries 1 to 11
+-- this query reports "no such table: g.geo" and stops there; queries 1 to 16
 -- above are unaffected, and ATTACH leaves an empty geo.sqlite behind which
 -- geo-lookup.sh then fills. Untidy but harmless, and honest about it.
 -- Registration, not location: whois says who was allocated the address block.
@@ -174,11 +261,9 @@ SELECT g.geo.cc                  AS country,
        COUNT(*)                  AS arrivals,
        COUNT(DISTINCT e.src_ip)  AS sources,
        ROUND(100.0 * COUNT(*) /
-             (SELECT COUNT(*) FROM v_events
-               WHERE eventid = 'cowrie.session.connect'), 1) AS pct_of_all
-  FROM v_events e
+             (SELECT COUNT(*) FROM v_arrivals), 1) AS pct_of_all
+  FROM v_arrivals e
   JOIN g.geo ON g.geo.src_ip = e.src_ip
- WHERE e.eventid = 'cowrie.session.connect'
  GROUP BY 1
  ORDER BY 2 DESC;
 .print

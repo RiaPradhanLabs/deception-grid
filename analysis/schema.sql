@@ -62,6 +62,46 @@ CREATE VIEW IF NOT EXISTS v_logins AS
    WHERE excluded IS NULL
      AND eventid IN ('cowrie.login.success', 'cowrie.login.failed');
 
+-- ARRIVALS, both doors. This view exists because of a bug found on 29 September
+-- 2026: every "arrivals" figure in the analysis filtered on
+-- `eventid = 'cowrie.session.connect'`, which is the IT door only. Conpot names
+-- its arrival `NEW_CONNECTION`, normalised here to `conpot.new_connection`. A
+-- query titled "arrivals per door" that silently counts one door would have
+-- reported the OT door as zero traffic for as long as anyone believed it.
+--
+-- Anything counting arrivals uses THIS view. Two event names, one definition, in
+-- one place -- so adding a third decoy is one line here rather than a hunt
+-- through the queries.
+--
+-- Note on `ts`: Cowrie writes `...Z`, Conpot writes `...+00:00`. Both are UTC
+-- and both sort correctly against each other, because the date-and-time prefix
+-- decides every comparison that matters. Only two events identical to the
+-- microsecond could order oddly between the doors.
+CREATE VIEW IF NOT EXISTS v_arrivals AS
+  SELECT ts, session, src_ip, src_port, dst_port,
+         CASE WHEN eventid LIKE 'conpot.%' THEN 'OT' ELSE 'IT' END AS door
+    FROM events
+   WHERE excluded IS NULL
+     AND eventid IN ('cowrie.session.connect', 'conpot.new_connection');
+
+-- The OT door. Conpot's records are normalised into the same `events` table by
+-- ingest.py -- see normalise_conpot there for the field mapping and for why one
+-- table rather than two. `eventid` always carries the 'conpot.' prefix, which is
+-- what separates the doors; `sensor` says which decoy, and dst_port says which
+-- port was knocked on. Never dst_ip: Azure translates, so it is always the
+-- private address.
+CREATE VIEW IF NOT EXISTS v_ot AS
+  SELECT ts, session, src_ip, src_port, dst_port,
+         substr(eventid, 8)                            AS event,
+         json_extract(raw, '$.request')                AS request,
+         json_extract(raw, '$.response')               AS response,
+         json_extract(raw, '$.data.function_code')     AS function_code,
+         json_extract(raw, '$.data.slave_id')          AS slave_id,
+         json_extract(raw, '$.session_time')           AS session_started
+    FROM events
+   WHERE excluded IS NULL
+     AND eventid LIKE 'conpot.%';
+
 CREATE VIEW IF NOT EXISTS v_commands AS
   SELECT ts, session, src_ip, input,
          CASE WHEN eventid = 'cowrie.command.input' THEN 1 ELSE 0 END AS ran
