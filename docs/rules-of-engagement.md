@@ -155,6 +155,54 @@ configuration setting is a statement of intent. A packet filter is a fact, it
 survives a software upgrade that reintroduces the behaviour, and it covers
 emulated commands nobody has thought of yet.
 
+We published the sensor's address ourselves
+
+This document states that the machine's public address is not published. On 29 September 2026 it was, by us, in commit 77071a7 — a comment in config/conpot.cfg recording what Conpot's public-IP fetch had written to the log:
+
+; address from an external service, which put `Fetched <address> as
+
+The address was in the line. It sat in a public repository for a few hours on 29 September 2026 before being removed the same day. It remains in the repository's history.
+
+Why it matters
+
+Not because an address is secret — the sensor is deliberately reachable from the whole internet, and anyone scanning finds it. It matters because the line identifies that address as a honeypot. A scanner that finds an open port learns nothing about what is behind it; a reader who finds this repository learns the machine is a decoy, and can avoid it, feed it, or discount whatever it reports. Either way the data stops describing what it claims to describe, and nothing in the logs would show that it had happened.
+
+It is the same reasoning that keeps the host-key fingerprints out of these documents. A fingerprint published alongside the words "Deception Grid honeypot" is a permanent identifier, matchable by anyone scanning the address range without ever connecting.
+
+How it was found
+
+Not by noticing the commit. A privacy sweep over the working files caught the address, it was scrubbed locally, and only a later check of what the repository actually contained — current files and full history — showed it had already been committed:
+
+grep -rn '<address>' . --exclude-dir=.git
+git log -p --all | grep -c '<address>'
+
+The gap is worth naming: checking your own working copy is not checking what you published. The two had diverged by one commit.
+
+What was decided, and what was rejected
+
+Scrub the file and record this note. Done the same day.
+
+Rewriting history — git filter-repo and a force push — was considered and rejected. It would need push credentials on a machine that deliberately has none, and a force push against a repository otherwise edited through the browser, to remove something exposed for a few hours in a repository with no watchers. It also would not undo publication: GitHub keeps unreferenced commits reachable by SHA, and anything already indexed or forked is beyond reach. A mitigation that looks complete and is not is worse than one that is honestly partial.
+
+Rotating the public address would genuinely neutralise the disclosure, and was rejected on experimental grounds. Four days of continuous collection against a single address is the dataset; changing it mid-collection makes the before and after incomparable, and the machine is scheduled for teardown in December 2026. The cost to the result exceeds the benefit of retiring an address that was exposed for hours.
+
+What changed as a result
+
+The pre-publication check is no longer only over working files. Before anything is committed:
+
+grep -rn -e '<host address>' -e '<analyst address>' -e '<host key fingerprints>' . --exclude-dir=.git
+git log -p --all | grep -c -e '<host address>' ...
+git log --all --name-only --pretty=format: | sort -u \
+  | grep -E 'exclude-ips|downloads/|\.sqlite|\.pem|id_ed25519'
+
+The third command is the one that would have caught this earlier: it lists every path the repository has ever held, rather than every path it holds now.
+
+The honest summary
+
+Two rules in this document have now been broken by the project itself: the sensor made outbound connections for four days, and the sensor's address was published for a few hours. Both were found by checking rather than by noticing, both are recorded here with their windows, and both were fixed at a layer that does not depend on anyone remembering — a packet filter in the first case, a history-inclusive pre-commit check in the second.
+
+A rules-of-engagement document that has never been violated is usually one nobody has audited.
+
 **What is kept and what is lost.** The 65 distinct files already collected stay on the
 sensor. They are never executed, never committed (`.gitignore` covers
 `downloads/`), and never copied to the analyst's laptop (the backup script
