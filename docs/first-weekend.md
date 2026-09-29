@@ -232,6 +232,51 @@ Discovery, neither yet verified against the ATT&CK pages. Cowrie also recorded a
 **JA4H fingerprint** for each forwarded HTTP request, which is a
 client-identification artefact worth a line in the analysis.
 
+## Where it came from, and why that says less than it looks
+
+The fifty most persistent sources were looked up in the regional internet
+registries — the `country:` field, which states who was *allocated* the address
+block. Those fifty account for **29,692 of 36,451 arrivals, 81%**.
+
+| Registered in | Arrivals | Sources | Share of all arrivals |
+|---|---|---|---|
+| United States | 15,205 | 18 | 42% |
+| France | 9,549 | 17 | 26% |
+| St Kitts & Nevis | 2,485 | **1** | 7% |
+| Russia | 603 | 2 | 2% |
+| Andorra | 402 | 2 | 1% |
+| India | 344 | 2 | 1% |
+| Netherlands | 342 | 3 | 1% |
+| Vietnam | 290 | 1 | 1% |
+| South Korea, Britain, Iran, unknown | 472 | 4 | 1% |
+
+Percentages are of *all* arrivals and do not sum to 100: the 917 sources never
+looked up are the remainder.
+
+**Two thirds of it is registered in the United States and France.** That is not
+a finding about Americans and French people. It is a finding about where servers
+are cheap to rent. France is the giveaway — 17 of the 50 busiest sources, and
+France is not known for a botnet industry; it is known for OVH and Scaleway.
+Renting a machine in Kansas or Roubaix costs a few euros a month and can be
+driven from anywhere on earth.
+
+So the honest version of this table is: **it says where the traffic arrived
+from, and nothing about who sent it.** If somebody asks whether a particular
+country is attacking us, the answer is that we cannot tell, and neither can
+anyone else from this data alone.
+
+**One line is worth more than the rest of the table.** St Kitts & Nevis is a
+single machine — one address, 2,485 arrivals, seven per cent of everything that
+knocked in four days. A country-level chart puts a Caribbean island above Russia
+on the strength of one rented server, which is the same lesson as "don't quote
+the event count", arriving from a different direction.
+
+Method note: this is `whois`, not a geolocation database. The two answer
+different questions — a registry says who holds the block, a geolocation
+database estimates where the machine sits. The claim being made here is
+registration, so the registry is the right source. `analysis/geo-lookup.sh`
+reproduces it.
+
 ## Two notes on honesty in the numbers
 
 **Don't quote the event count.** A handful of addresses produce a large share of
