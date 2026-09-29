@@ -124,4 +124,28 @@ SELECT substr(seen, 1, 16) AS seen, why, substr(line, 1, 60) AS line_start
   FROM rejects
  ORDER BY id DESC
  LIMIT 10;
+
+.print
+.print === 12. Registration country of the busiest sources ===
+-- Needs geo.sqlite, built by ./geo-lookup.sh. If that file does not exist yet
+-- this query reports "no such table: g.geo" and stops there; queries 1 to 11
+-- above are unaffected, and ATTACH leaves an empty geo.sqlite behind which
+-- geo-lookup.sh then fills. Untidy but harmless, and honest about it.
+-- Registration, not location: whois says who was allocated the address block.
+-- Renting a server costs a few euros a month from anywhere, so this says where
+-- traffic arrived from and nothing about who sent it. Quote the coverage figure
+-- with the table -- percentages are of ALL arrivals and will not sum to 100,
+-- because the sources never looked up are the remainder.
+ATTACH DATABASE 'geo.sqlite' AS g;
+SELECT g.geo.cc                  AS country,
+       COUNT(*)                  AS arrivals,
+       COUNT(DISTINCT e.src_ip)  AS sources,
+       ROUND(100.0 * COUNT(*) /
+             (SELECT COUNT(*) FROM v_events
+               WHERE eventid = 'cowrie.session.connect'), 1) AS pct_of_all
+  FROM v_events e
+  JOIN g.geo ON g.geo.src_ip = e.src_ip
+ WHERE e.eventid = 'cowrie.session.connect'
+ GROUP BY 1
+ ORDER BY 2 DESC;
 .print
