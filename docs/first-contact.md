@@ -47,9 +47,21 @@ username/password pair.
 That matters for counting. If it is right, a share of what the log calls
 *login attempts* are not attempts, and treating them as brute force would
 overstate the credential-guessing volume — which is the headline figure of
-the IT-door story. It is testable: those pairs should appear only in sessions
-with no successful login. **Run that check before publishing any login-attempt
-figure, and state which convention the analysis adopted.**
+the IT-door story.
+
+**Checked on 29 September: it is right, and larger than it looked from one
+day.** Over four days, 4,722 of 38,247 recorded attempts — one in eight — are
+console words or non-printable bytes rather than credentials, and
+`analysis/ingest.py` excludes them under the reason `artefact-command`. The
+convention and the excluded pairs are printed in every run's output, so it can
+be argued with rather than taken on trust.
+
+The rule took two attempts. The first tested for a real NUL byte and matched
+nothing, because Cowrie writes the escape as literal text. The second matched
+any such escape and threw out real credentials that arrive with a trailing
+null — `root/7ujMko0admin`, a known camera default, among them. The distinction
+is semantic: `enable` and `blender` are identical in shape, so only a list of
+console words separates a command from a password.
 
 [seclists]: https://github.com/danielmiessler/SecLists/blob/master/Passwords/Malware/mirai-botnet.txt
 
@@ -91,13 +103,50 @@ separately: it is consistent with port enumeration, or with a bot whose later
 stages fail. Whatever it is, folding it into "login attempts" would overstate
 brute-force volume.
 
-## What it did not do
+## What it did not do — and why the first explanation was wrong
 
-No payload was delivered. The most likely explanation is a failed liveness
-check — the `HISILICON` response. This bounds what the dataset can support:
-the decoy reliably captures reconnaissance and credential behaviour, and
-captures payload delivery only sometimes. Any claim about what attackers
-*install* must be qualified accordingly.
+No payload was delivered. This note originally proposed that the imitation
+failed the `HISILICON` liveness check. **That was wrong, and the command log
+disproves it.** Corrected 29 September against four days of data.
+
+Cowrie records whether each command was accepted or rejected:
+
+| Command | Times | Rejected |
+|---|---|---|
+| `enable` | 1,473 | **1,473** |
+| `shell` | 1,448 | **1,448** |
+| `system` | 1,440 | **1,440** |
+| `sh` | 1,443 | 0 |
+| `/bin/busybox HISILICON` | 1,471 | 0 |
+| `ping; sh` | 984 | 0 |
+| `>/var/.f && chmod 777 /var/.f && …` | 488 | 0 |
+
+Only the three router-specific escalation words failed, because they are not
+commands in Cowrie's emulated shell. Everything else was accepted. **The
+liveness check passed 1,471 times.** The bot learned the CPU architecture and
+was given a writable directory.
+
+So the drop-off is at the last step, not the first:
+
+| Stage | Sessions |
+|---|---|
+| Logged in and ran something | 1,473 |
+| Probed for command injection (`ping; sh`) | 984 |
+| Read its own binary for the CPU architecture | 493 |
+| Hunted for a writable directory | 488 |
+| **Fetched a payload** | **0** |
+
+What this bounds is narrower than first claimed, and in a more useful way. The
+decoy captures the whole reconnaissance chain reliably — credential guessing,
+escalation attempts, architecture discovery, and the search for somewhere to
+write. What it does not capture is **delivery**, and the reason is now an open
+question rather than a settled one. Three candidates, none tested: the payload
+host was already offline, the bot's own next stage failed, or something later
+in the emulation gave the decoy away.
+
+Worth resolving before December, because "what do they install" is a question
+an audience will ask, and the current answer is "we don't know, and here is
+exactly how far we got".
 
 ## What this changes for the analysis
 
@@ -147,26 +196,35 @@ was a default password nobody changed. That is a recommendation a
 forty-person factory can act on this week, and it is now evidenced by a
 specific event at a specific second.
 
-**T1497 connects this mapping to the decoy's own limitation.** If the bot ran
-a liveness check to confirm it was on real hardware, and then left without
-delivering a payload, the most likely reading is that the imitation failed
-that check. The technique mapping and the honest account of the instrument's
-weakness describe the same moment from two directions.
+**T1497 no longer reads as evidence against the instrument — corrected 29
+September.** The first version of this note argued that if the bot ran a
+liveness check and then left without delivering a payload, the imitation had
+probably failed the check. Four days of command data say otherwise:
+`/bin/busybox HISILICON` was accepted 1,471 times. If it is a sandbox or
+liveness check, the decoy passed it. The technique mapping stands; the
+inference drawn from it does not.
 
-## The telnet skew was not real — corrected 28 September
+## The telnet skew was not real — corrected 28 and 29 September
 
 Forty minutes, six sources, zero arrivals on port 22. Port 22 was tested from
 an external address the same morning and answered correctly, so the skew was
 not a fault in the instrument, and it was written up here as a finding.
 
-**It was not a finding. It was forty minutes of data.** Across the first full
-weekend the picture reverses: roughly four arrivals on port 22 for every one
-on port 23. See `first-weekend.md`.
+**It was not a finding. It was forty minutes of data.** Over the first four
+days the picture reverses: about 3.4 connections on port 22 for every one on
+port 23 — 28,158 against 8,293, as of 29 September 11:23 UTC. See
+`first-weekend.md`.
 
-This correction is left in rather than edited away, because the mistake is
-instructive and cost nothing: an hour of anything looks like a pattern, and
-the discipline is to wait for enough of it. Nothing else in this note depends
-on the claim.
+A first version of this correction, written on 28 September, said "roughly four
+to one". It was itself derived from one log file rather than five, because
+Cowrie rotates the log daily and only the current-day file was being read. The
+direction of that correction was right; its size was never measured. Both
+versions are left in.
 
-The port-22 test session appears in the log from the analyst's own address
-and is excluded at ingest alongside loopback.
+The lesson holds twice over: an hour of anything looks like a pattern, and a
+figure is only as wide as the data you actually opened. Nothing else in this
+note depends on either claim — the forty-minute timeline above came from the
+current-day file, read on the day, which is exactly what it says it is.
+
+The port-22 test session appears in the log from the analyst's own address and
+is excluded at ingest as `analyst`, alongside loopback.
