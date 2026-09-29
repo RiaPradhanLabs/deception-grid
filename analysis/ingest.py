@@ -306,56 +306,104 @@ def exclusion_reason(event, own):
     return None
 
 
-def relabel(db, own):
-    """Re-apply the exclusion rules to every row already in the database.
+DERIVED = ('ts', 'eventid', 'sensor', 'session', 'src_ip', 'src_port',
+           'dst_port', 'username', 'password', 'input', 'message', 'excluded')
 
-    This exists because of a bug found on 29 September 2026. `excluded` is
-    computed when a row is inserted, and `INSERT OR IGNORE` never touches a row
-    it already holds -- so narrowing the artefact rule relabelled NOTHING. The
-    code said one thing and the database said another, silently, and the only
-    way to notice was to read the excluded list and see a row that the current
-    rule would have admitted.
 
-    That is exactly the failure this pipeline was built to prevent, so the fix
-    is not "remember to rebuild the database". Every run re-derives the label
-    for every row from `raw`, which makes the CODE the single authority and the
-    database a cache of it. Rebuilding from the logs would work too, but it
-    throws away the `runs` history, and the history is the evidence that the
-    pipeline has been running.
+def rederive(db, own):
+    """Recompute EVERY derived column for every row, from `raw`.
 
-    Conpot rows are normalised first: the rules take Cowrie-shaped records, and
-    a `conpot.` prefix on eventid is how a row says which decoy it came from.
+    This exists because of a bug found twice on 29 September 2026, the second
+    time as the general case of the first.
 
-    Prints what changed and why. A silent relabel would be the same class of
-    problem as the bug it fixes.
+    Every column except `raw` is DERIVED -- computed when the row was inserted.
+    `INSERT OR IGNORE` never touches a row it already holds, so changing the
+    code that computes those columns changed nothing already in the database.
+
+    The narrow version bit first: narrowing the artefact rule relabelled NOTHING,
+    and the only way to notice was to read the excluded list and see a row the
+    current rule would have admitted. That was fixed by recomputing `excluded`.
+
+    The general version bit an hour later. Conpot's `event_type` is null on its
+    protocol records, so those rows had been labelled `conpot.none`; the fix
+    synthesised `conpot.modbus_request` instead. New rows got the new label and
+    the old rows kept `conpot.none` -- along with an `input` column still holding
+    Conpot's "b'0001...'" bytes-repr, because that unwrapping is derived too.
+    Recomputing one column had fixed one column.
+
+    So this recomputes ALL of them. `raw` is the only authority in the database;
+    everything else is a cache of what the current code makes of it. A row's
+    identity stays its line_sha, so nothing is duplicated and the `runs` history
+    survives -- which rebuilding from the logs would have discarded, and that
+    history is the evidence the pipeline has been running.
+
+    Which normaliser applies is decided by the record's SHAPE, not by the stored
+    eventid: a Cowrie record has `eventid`, a Conpot record does not. Trusting
+    the stored label here would mean trusting the value being recomputed.
+
+    Prints what changed, per column. A silent re-derivation would be the same
+    class of problem as the bug it fixes.
     """
-    changes = {}
+    columns = ', '.join(DERIVED)
+    changed_cols = {}
+    transitions = {}
     updates = []
-    for row_id, eventid, raw, was in db.execute(
-            'SELECT id, eventid, raw, excluded FROM events'):
+
+    for row in db.execute('SELECT id, raw, %s FROM events' % columns):
+        row_id, raw = row[0], row[1]
+        current = dict(zip(DERIVED, row[2:]))
         try:
             record = json.loads(raw)
         except Exception:
             continue
-        event = (normalise_conpot(record)
-                 if eventid.startswith('conpot.') else record)
-        now_reason = exclusion_reason(event, own)
-        if now_reason != was:
-            updates.append((now_reason, row_id))
-            key = '%s -> %s' % (was or '(counts)', now_reason or '(counts)')
-            changes[key] = changes.get(key, 0) + 1
+
+        event = record if 'eventid' in record else normalise_conpot(record)
+        fresh = {
+            'ts':       event.get('timestamp'),
+            'eventid':  event.get('eventid'),
+            'sensor':   event.get('sensor'),
+            'session':  event.get('session'),
+            'src_ip':   event.get('src_ip'),
+            'src_port': event.get('src_port'),
+            'dst_port': event.get('dst_port'),
+            'username': event.get('username'),
+            'password': event.get('password'),
+            'input':    event.get('input'),
+            'message':  event.get('message'),
+            'excluded': exclusion_reason(event, own),
+        }
+
+        differing = [c for c in DERIVED if fresh[c] != current[c]]
+        if not differing:
+            continue
+        for c in differing:
+            changed_cols[c] = changed_cols.get(c, 0) + 1
+        if 'eventid' in differing:
+            key = '%s -> %s' % (current['eventid'], fresh['eventid'])
+            transitions[key] = transitions.get(key, 0) + 1
+        if 'excluded' in differing:
+            key = '%s -> %s' % (current['excluded'] or '(counts)',
+                                fresh['excluded'] or '(counts)')
+            transitions[key] = transitions.get(key, 0) + 1
+        updates.append(tuple(fresh[c] for c in DERIVED) + (row_id,))
 
     if updates:
-        db.executemany('UPDATE events SET excluded = ? WHERE id = ?', updates)
+        db.executemany(
+            'UPDATE events SET %s WHERE id = ?'
+            % ', '.join('%s = ?' % c for c in DERIVED), updates)
         db.commit()
 
     print()
-    print('=== relabelled against the current rules ===')
-    if not changes:
+    print('=== re-derived from raw against the current code ===')
+    if not updates:
         print('    nothing changed -- the database already matches the code')
-    for key, n in sorted(changes.items(), key=lambda kv: -kv[1]):
-        print('    %-44s %6d rows' % (key, n))
-    return sum(changes.values())
+    else:
+        print('    %d rows updated' % len(updates))
+        for c, n in sorted(changed_cols.items(), key=lambda kv: -kv[1]):
+            print('      column %-10s %6d rows' % (c, n))
+        for key, n in sorted(transitions.items(), key=lambda kv: -kv[1]):
+            print('      %-44s %6d' % (key, n))
+    return len(updates)
 
 
 def report(db):
@@ -550,7 +598,7 @@ def main():
     print('  already held      %d' % skipped)
     print('  would not parse   %d' % rejected)
 
-    relabel(db, own)
+    rederive(db, own)
     report(db)
     db.close()
 
