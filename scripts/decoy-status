@@ -13,11 +13,20 @@ LOGDIR=/home/cowrie/cowrie/var/log/cowrie
 DOWNLOADS=/home/cowrie/cowrie/var/lib/cowrie/downloads
 COWRIE_UID=1001
 
-# Samples collected before outbound connections were blocked on 29 Sept 2026.
-# This number must not grow. If it does, the block in /etc/ufw/before.rules is
-# gone and the sensor is fetching files from attacker-controlled hosts again.
+# Outbound connections were blocked on 29 September 2026 at about 12:00 UTC.
+# The last file Cowrie fetched over the network was at 08:51 that morning, so
+# any url-bearing download after this cutoff means the block has failed.
 # See docs/rules-of-engagement.md, "The outbound download problem".
-SAMPLE_BASELINE=104
+BLOCK_CUTOFF=2026-09-29T12:00
+#
+# A first version of this check counted FILES in the downloads directory against
+# a baseline instead, and produced a false alarm within the hour. That directory
+# is not "downloads": it holds every file whose content Cowrie captured,
+# including files attackers push over SCP and the output of shell redirections,
+# and those keep arriving whether or not outbound is blocked. Counting them
+# measures attacker activity, not our firewall. The discriminator is the `url`
+# field: present means Cowrie went and got it, absent means the attacker
+# supplied the bytes.
 
 echo
 echo "  decoy-01 status - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
@@ -41,16 +50,40 @@ else
   echo "               see docs/build.md, 'Stopping the decoys reaching out'"
 fi
 
-# Second, independent canary: the block could be present but ineffective.
-# Counting files is evidence; reading the rule is only intent.
+# Second, independent canary: the rule could be present but ineffective.
+# Reading the rule is intent; counting fetches after the cutoff is evidence.
+python3 - "$LOGDIR" "$BLOCK_CUTOFF" <<'PY'
+import glob, json, os, sys
+
+logdir, cutoff = sys.argv[1], sys.argv[2]
+fetched_after, hosts = 0, set()
+for path in sorted(glob.glob(os.path.join(logdir, 'cowrie.json*'))):
+    with open(path, errors='replace') as fh:
+        for line in fh:
+            if 'file_download' not in line:
+                continue
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if e.get('eventid') != 'cowrie.session.file_download':
+                continue
+            url = e.get('url')
+            if url and e.get('timestamp', '') >= cutoff:
+                fetched_after += 1
+                hosts.add(url.split('/')[2] if '//' in url else url)
+
+if fetched_after:
+    print("  fetches      *** %d NETWORK FETCHES SINCE THE BLOCK ***" % fetched_after)
+    print("               from %s" % ', '.join(sorted(hosts))[:120])
+    print("               the outbound block is not holding -- see docs/build.md")
+else:
+    print("  fetches      none since the block went in (correct)")
+PY
+
 if [ -d "$DOWNLOADS" ]; then
   n=$(find "$DOWNLOADS" -maxdepth 1 -type f ! -name '.gitignore' | wc -l)
-  if [ "$n" -gt "$SAMPLE_BASELINE" ]; then
-    echo "  samples      $n  *** $(( n - SAMPLE_BASELINE )) NEW SINCE THE BLOCK ***"
-    echo "               files are still arriving: the block is not working"
-  else
-    echo "  samples      $n held, baseline $SAMPLE_BASELINE, none new"
-  fi
+  echo "  captured     $n files held (fetched, pushed over scp, and redirections)"
 fi
 
 # --- the log ------------------------------------------------------------
