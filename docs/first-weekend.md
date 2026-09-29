@@ -232,6 +232,24 @@ Discovery, neither yet verified against the ATT&CK pages. Cowrie also recorded a
 **JA4H fingerprint** for each forwarded HTTP request, which is a
 client-identification artefact worth a line in the analysis.
 
+### Not yet examined: it may not have stopped on the 28th
+
+Forward-request events also appear with destination ports **443 and 2535** across
+the whole four days, not only in the three sessions tabulated above. 2535 is the
+third source's target already named; 443 is not accounted for anywhere in this
+note. So the three cases above are a sample rather than the set, and the
+behaviour probably did not stop on the 28th.
+
+This is a lead and not a finding. The figures behind it were never re-derived —
+it was noticed late, after the three cases were written up, and it is recorded
+here only so that it survives the writing instead of being remembered.
+
+The query that settles it is standing: `analysis/weekly.sql` question 10,
+*attempts to use us as a proxy*, groups every `cowrie.direct-tcpip*` event by
+source and destination port. It answers three things this note does not — how
+many sources, over how long, and whether any request was ever anything other
+than refused. Every row must say discarded.
+
 ## What they actually installed, and what finding out cost us
 
 A small number of visitors went all the way: got in, looked around, and then
