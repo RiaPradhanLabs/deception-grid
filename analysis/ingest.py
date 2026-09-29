@@ -60,6 +60,29 @@ def printable_part(value):
     return ESCAPED_BYTE.sub('', value or '').replace('\ufeff', '').strip()
 
 
+BYTES_REPR = re.compile(r"^b(['\"])(.*)\1$", re.S)
+
+
+def unwrap_bytes_repr(value):
+    """Turn Conpot's "b'0001...'" into 0001...
+
+    Conpot stores the Modbus request and response as a Python bytes REPR inside
+    a JSON string, so the log literally contains the characters b, ', then the
+    hex, then '. Left alone, every consumer has to strip that before it can
+    decode a frame, and sooner or later one of them forgets and compares
+    "b'0103'" against "0103".
+
+    Normalised on the way in rather than at every point of use. `raw` keeps the
+    original string untouched, so nothing is lost and the transformation is
+    auditable. Anything not matching the pattern is returned unchanged -- if a
+    future Conpot writes plain hex, this becomes a no-op rather than a bug.
+    """
+    if not isinstance(value, str):
+        return value
+    match = BYTES_REPR.match(value.strip())
+    return match.group(2) if match else value
+
+
 def normalise_conpot(event):
     """Conpot's record in Cowrie's shape, so both decoys share one facts table.
 
@@ -94,9 +117,26 @@ def normalise_conpot(event):
     rules to disagree.
     """
     data = event.get('data') or {}
+
+    # event_type is NULL on exactly the records that matter. Verified against
+    # the live log on 29 September 2026: NEW_CONNECTION and CONNECTION_LOST
+    # carry it, and the protocol records -- the ones holding slave_id and
+    # function_code -- have `"event_type": null` and no other field naming the
+    # event. Without a fallback every Modbus request would be recorded as
+    # `conpot.none`, which is to say the most interesting events at the OT door
+    # would all share one meaningless label.
+    #
+    # An earlier key census missed this because it counted whether the KEY was
+    # present. It is present in every record; the value is null. Counting keys
+    # is not reading values.
+    event_type = event.get('event_type')
+    if not event_type:
+        event_type = ('%s_request' % (event.get('protocol') or 'unknown')
+                      if event.get('request') is not None else 'unknown')
+
     return {
         'timestamp': event.get('event_time'),
-        'eventid':   'conpot.' + str(event.get('event_type', 'unknown')).lower(),
+        'eventid':   'conpot.' + str(event_type).lower(),
         'sensor':    event.get('sensorid'),
         'session':   event.get('session_id'),
         'src_ip':    event.get('src_ip'),
@@ -104,7 +144,7 @@ def normalise_conpot(event):
         'dst_port':  event.get('dst_port'),
         'username':  None,
         'password':  None,
-        'input':     event.get('request'),
+        'input':     unwrap_bytes_repr(event.get('request')),
         'message':   json.dumps(data, sort_keys=True) if data else None,
     }
 

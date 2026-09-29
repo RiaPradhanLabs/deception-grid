@@ -93,7 +93,12 @@ CREATE VIEW IF NOT EXISTS v_arrivals AS
 CREATE VIEW IF NOT EXISTS v_ot AS
   SELECT ts, session, src_ip, src_port, dst_port,
          substr(eventid, 8)                            AS event,
-         json_extract(raw, '$.request')                AS request,
+         -- `input`, not json_extract(raw,'$.request'): ingest.py has already
+         -- unwrapped Conpot's "b'0001...'" bytes-repr into plain hex there.
+         -- `response` is read from raw and still carries the wrapper, which is
+         -- deliberate -- what the decoy replied is not a finding about the
+         -- visitor, so it is kept verbatim rather than tidied.
+         input                                         AS request,
          json_extract(raw, '$.response')               AS response,
          json_extract(raw, '$.data.function_code')     AS function_code,
          json_extract(raw, '$.data.slave_id')          AS slave_id,
