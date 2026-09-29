@@ -89,10 +89,20 @@ SELECT src_ip,
  LIMIT 10;
 
 .print
-.print === 9. What they typed once inside ===
-SELECT input, COUNT(*) AS times, COUNT(DISTINCT session) AS sessions
+.print === 9. What they typed once inside, and whether it worked ===
+-- Cowrie logs each command twice: cowrie.command.input carries the raw line
+-- (with its trailing space) and cowrie.command.failed carries the parsed word.
+-- Summing both double-counts every command, which an earlier version of this
+-- query did. trim() collapses the pair; the two columns keep them apart.
+-- When `typed` and `failed` are equal, every attempt at that command failed --
+-- which is the quantified form of "no payload was ever delivered".
+SELECT trim(input)                AS command,
+       SUM(ran)                   AS typed,
+       SUM(1 - ran)               AS failed,
+       COUNT(DISTINCT session)    AS sessions
   FROM v_commands
  WHERE input IS NOT NULL
+   AND trim(input) <> ''
  GROUP BY 1
  ORDER BY 2 DESC
  LIMIT 15;
