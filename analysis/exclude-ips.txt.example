@@ -1,0 +1,14 @@
+# The analyst's own addresses. One per line; '#' comments and blanks ignored.
+# ingest.py labels events from these as excluded = 'analyst' -- they stay in
+# the database, they just do not count as visitors.
+#
+# The real file is NOT in this repository. It lives only on the sensor, mode
+# 600, because it is a list of someone's home IP addresses.
+#
+# Top it up each time the home connection rotates, from inside an SSH session,
+# so the address never has to be typed:
+#
+#     echo "${SSH_CLIENT%% *}" >> exclude-ips.txt
+#     sort -u -o exclude-ips.txt exclude-ips.txt
+#
+127.0.0.1
