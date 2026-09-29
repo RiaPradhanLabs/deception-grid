@@ -113,7 +113,7 @@ had failed the `HISILICON` liveness check. **Version two** accepted that the
 liveness check had passed but still reported zero payloads, from a command list
 truncated at the fifteen most frequent. **Version three, below, is checked
 against the download events and the files on disk.** Payloads were delivered:
-259 of them, across 131 sessions, 104 distinct files, 74 MB.
+81 network fetches across 33 sessions, 33 distinct files, from 8 hosts.
 
 Corrected against four days of data.
 
@@ -142,17 +142,46 @@ was given a writable directory.
 | Probed for command injection (`ping; sh`) | 984 |
 | Read its own binary for the CPU architecture | 493 |
 | Hunted for a writable directory | 488 |
-| **Fetched a payload** | **131** |
+| **Fetched a payload over the network** | **33** |
+| Pushed a file to it over SCP instead | 14 |
 
 Stage counts, not a strict funnel: different bot families take different routes,
-so the 131 are not all a subset of the 488. Read each row as "reached this
+so the 33 are not all a subset of the 488. Read each row as "reached this
 stage", never "of those above".
 
-Roughly **one session in eleven went the whole way**. The download events break
-down as 259 successful fetches across 131 sessions and 72 failures across 15
-more, producing **104 distinct files totalling 74 MB**, stored under their
-SHA-256 in `var/lib/cowrie/downloads/`. Separately, 14 sessions *pushed* 79
-files to the sensor over SCP rather than pulling them.
+The writable-directory row and the SCP row are different things and are counted
+separately on purpose. A first version of this table had a single row reading
+"had a file pushed to it instead — 112", which merged SCP pushes with the 104
+sessions that merely wrote a test file during the directory hunt. Those were
+already counted on the row above, so the table double-counted them and
+overstated delivery eightfold.
+
+Roughly **one session in forty-five went the whole way**. The download events break
+down as **81 successful fetches across 33 sessions** and 72 failures across 15
+more, from **8 distinct hosts**, producing 33 distinct files stored under their
+SHA-256 in `var/lib/cowrie/downloads/`.
+
+**Fetching was more than twice as common as pushing: 33 sessions against 14.**
+An earlier version of this paragraph claimed the opposite — "112 sessions pushed
+a file against 33 that fetched one" — by lumping SCP pushes together with shell
+redirections. That is the same conflation this whole section is about, committed
+again inside it. The three kinds separate cleanly:
+
+| Mechanism | Events | Sessions | Distinct files |
+|---|---|---|---|
+| Fetched over the network (`url` present) | 81 | 33 | 33 |
+| Pushed over SCP (`file_upload`) | 79 | **14** | 24 |
+| Shell redirection captured (`file_download`, no `url`) | 184 | 104 | **8** |
+
+The third row is not payload delivery at all. It is the writable-directory probe:
+`>/var/.f` creates a file, Cowrie stores its content, and 184 events yield only
+eight distinct files because it is the same tiny file over and over. Counting it
+as delivery inflated the sessions figure eightfold.
+
+**Distinct captured content is 65 hashes** — not the 104 first reported, and not
+the 106 files on disk either: redirection captures are named `redir_<uuid>`
+rather than by hash, so the directory holds more files than there is distinct
+content in it.
 
 The commands behind the downloads are worth reading in the log: they are
 architecture ladders. One script tries `net.x86_64`, `net.mips`, `net.mpsl`,
@@ -164,7 +193,7 @@ care; it tries every build until one runs.
 ### The thing this cost us
 
 Cowrie does not fake `wget`. It really fetched those files, which means the
-sensor opened **331 outbound connections to attacker-controlled hosts** between
+sensor opened **153 outbound connections to 8 attacker-controlled hosts** between
 25 and 29 September. `docs/rules-of-engagement.md` said the project only ever
 receives and never connects back to an address in its own logs. Both statements
 were false for four days.
@@ -221,7 +250,7 @@ places, which is the argument for doing it rather than asserting it.
 | **T1110.001** Password Guessing | The refused credential attempts | Verified. Not credential stuffing, which means breached username/password pairs, and not spraying, which means one password across many accounts |
 | **T1078.001** Valid Accounts: Default Accounts | `root/root` succeeding | Verified, and missing from the first draft. ATT&CK covers factory-set credentials on devices left unchanged after installation |
 | **T1082** System Information Discovery | `cat /proc/self/exe` | Verified as explicitly covering processor architecture |
-| **T1105** Ingress Tool Transfer | 259 completed downloads, 104 distinct samples | Verified, and **observed completing** — corrected 29 September, having first been recorded as attempted but never completing |
+| **T1105** Ingress Tool Transfer | 81 completed network fetches in 33 sessions, 33 distinct files, 8 hosts. Separately 79 SCP pushes in 14 sessions | Verified, and **observed completing** — corrected 29 September, having first been recorded as attempted but never completing. The SCP pushes are arguably T1105 too and arguably lateral tooling; not resolved |
 | **T1497** Virtualization/Sandbox Evasion | `/bin/busybox HISILICON` | Probable, page not read in full. The check exists to confirm a real device rather than an analysis environment |
 | **T1059.004** Unix Shell | `sh` / `shell` / `enable` / `system` | Sub-technique unverified; the parent T1059 is not in doubt |
 | **T1083** File and Directory Discovery | The writable-directory hunt | Unverified. Defensible, but no ATT&CK technique cleanly describes *testing whether a directory is writable* |
