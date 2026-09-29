@@ -24,6 +24,7 @@ Neither is needed in normal use.
 
 import datetime
 import glob
+import gzip
 import hashlib
 import json
 import os
@@ -147,6 +148,24 @@ def normalise_conpot(event):
         'input':     unwrap_bytes_repr(event.get('request')),
         'message':   json.dumps(data, sort_keys=True) if data else None,
     }
+
+
+def open_log(path):
+    """Open a log file, transparently handling a compressed rotation.
+
+    ingest.py globs `*.json*`, which matches a rotated `conpot.json.1` and also
+    a compressed `conpot.json.1.gz`. Opened as text, a gzip file yields binary
+    noise that fails to parse -- so every line would land in `rejects` and the
+    day's data would be quietly absent from every figure.
+
+    The logrotate config written on 29 September 2026 sets `nocompress` for
+    exactly this reason. This function exists so that changing that setting -- by
+    anyone, at any point, for a good reason -- cannot lose data. Two independent
+    defences rather than a comment asking to be remembered.
+    """
+    if path.endswith('.gz'):
+        return gzip.open(path, 'rt', errors='replace')
+    return open(path, errors='replace')
 
 
 def now():
@@ -527,7 +546,7 @@ def main():
             for path in paths]
 
     for normaliser, path in work:
-        with open(path, errors='replace') as fh:
+        with open_log(path) as fh:
             for line in fh:
                 line = line.rstrip('\n')
                 if not line.strip():
