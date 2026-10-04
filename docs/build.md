@@ -1249,6 +1249,120 @@ on this sensor or a specific defect a previous version had:
   malware, and since it becomes live immediately, `.gitignore` had to be
   configured first.
 
+## Feature extraction, for analysis after the machine is gone
+
+Written 4 October 2026, ten weeks before teardown, because two of the things this
+project collected cannot be analysed retrospectively and that only becomes
+obvious once you ask what happens on 12 December.
+
+The captured files never leave the sensor. That is the rule, and it means any
+analysis needing the file bytes has to happen here and send back a table. On 12
+December the resource group is deleted and the files go with it. So either a
+feature table exists before then or that analysis is impossible rather than
+merely unstarted. The same logic applies, less sharply, to the TTY recordings —
+those are already inside the backups, so they are safe, but nothing had yet been
+written to read them.
+
+Two scripts, `analysis/features-files.py` and `analysis/features-tty.py`.
+
+### Standard library only, on purpose
+
+The obvious tools for clustering malware variants are fuzzy hashes — TLSH or
+ssdeep. Both need C extensions, which need a compiler and development headers.
+
+Installing a build toolchain on a machine whose entire purpose is to be attacked
+is a bad trade for a marginal gain in clustering quality. So the features are
+computed with the standard library: a 256-bin byte histogram, Shannon entropy over
+the whole file and over eight equal windows, printable and NUL ratios, string
+counts, and the ELF header fields parsed directly from the bytes — class, machine,
+type, section count. The histogram and the entropy windows are what the clustering
+runs on; a repacked or recompiled variant of the same family still sits close to
+its siblings in that space.
+
+The windowed entropy is worth more than it sounds. A packed region shows up as a
+step from about 6 bits to nearly 8, and the position of the step distinguishes a
+packed binary from one with an appended blob.
+
+The script opens every file `'rb'` and reads it. It does not execute anything,
+does not open a socket, and submits nothing anywhere. It needs no network access,
+which also means it works for accounts the firewall blocks outbound.
+
+### The redirection captures, again
+
+The downloads directory holds three different kinds of thing, and treating them as
+one produced five wrong figures on 29 September. `features-files.py` labels each
+file — `hash-named`, `shell-redirection`, `other` — rather than filtering, so the
+redirection captures can be excluded by a `WHERE` clause and the excluded count
+stated. It also prints distinct sha256 separately from the file count, with a
+comment in the output saying which one to quote. A script that makes the right
+number easier to reach than the wrong one is worth more than a comment in a
+document saying which is which.
+
+### A parser that fails loudly
+
+Cowrie's TTY log is its own binary format: a 24-byte header per record, six
+little-endian int32 fields, then the payload. That layout comes from
+`cowrie/core/ttylog.py` and has been stable for years, but it is not a documented
+interface and nothing guarantees it for this build, `3.0.16.dev4+g9dc1ea8f3`.
+
+The temptation is to write the obvious parser and trust it, because it will
+produce numbers either way. That is the failure mode this whole project keeps
+running into: output that looks correct is not evidence of correctness.
+
+So `features-tty.py` validates every record — op code in range, direction in
+range, microseconds under a million, length plausible, no trailing bytes after the
+last record — and raises on anything that fails. A file that does not parse
+cleanly is **reported by name**, not skipped silently, and the summary ends with a
+warning if any file failed.
+
+It also has a `--verify` mode that parses one recording, prints the input byte
+count, the time span and the first 120 bytes of input as text, and then tells the
+reader to compare that against Cowrie's own player:
+
+```
+/home/cowrie/cowrie/bin/playlog -f <that same file>
+```
+
+If they disagree, the parser is wrong for this build and the features mean
+nothing. Discovering that is a normal outcome. Not discovering it, and publishing
+keystroke statistics derived from a misread format, is the outcome worth this much
+care to avoid.
+
+`--verify` defaults to the **largest** recording rather than the first
+alphabetically, because the first file in a directory is as likely as not to be a
+two-record stub that proves nothing.
+
+### The weak labels are labelled as weak
+
+`features-tty.py` assigns each recording `scripted`, `typed` or `unlabelled` from
+thresholds: more than 95% of inter-keystroke intervals under 5 ms is a paste; a
+backspace present with a median interval over 80 ms is a person correcting
+themselves; everything else is unlabelled.
+
+Those thresholds are a guess. They are written in the script's docstring so the
+guess is visible, and the summary prints the count in each class. The `unlabelled`
+rows are the interesting ones — a tool inserting a fixed delay to look human and a
+person using tab-completion both land there — and the script says so in its own
+output, because a residue that gets tidied away is a finding that gets lost.
+
+### Testing
+
+Both scripts were tested before being committed. `features-files.py` against real
+ELF binaries of known architecture, a shell script, a random-bytes file and a
+redirection artefact: entropy 8.00 on random data, correct architecture and
+section counts from the ELF headers, correct classification of the `redir_` name.
+`features-tty.py` against four synthetic recordings built to the assumed format —
+a slow session with a backspace, a single pasted chunk, a machine using a fixed
+150 ms delay, and 500 bytes of random data. The first three were labelled `typed`,
+`scripted` and `unlabelled` respectively, the fixed-delay one showing a uniformity
+of 0.00 as intended, and the random file failed to parse with a message naming the
+offset.
+
+Both refuse to run against an empty directory and exit non-zero, rather than
+writing an empty CSV and reporting success. An empty result is indistinguishable
+from a successful one otherwise, which is the same failure as the `grep -q` guard
+that failed open on 29 September.
+
 ## Teardown
 
 Delete the resource group `deception-grid` — that contains the VM, disk, IP and
