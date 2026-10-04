@@ -43,8 +43,6 @@ the operator is in Germany, the machine is in Austria. The position taken:
 | Retention | Raw logs live only on the machine and are destroyed with it at teardown. The database copy retains what is needed for the written analysis |
 | Never collected | Nothing is solicited from senders. No content is retrieved from them, no connection is made back to them |
 
-
-
 ## Rules: TL;DR
 
 1. **Receive only.** No scan, no probe, no reply, no retaliation, ever, to
@@ -155,6 +153,18 @@ configuration setting is a statement of intent. A packet filter is a fact, it
 survives a software upgrade that reintroduces the behaviour, and it covers
 emulated commands nobody has thought of yet.
 
+**What is kept and what is lost.** The 65 distinct files already collected stay on the
+sensor. They are never executed, never committed (`.gitignore` covers
+`downloads/`), and never copied to the analyst's laptop (the backup script
+excludes that directory by name). From now on Cowrie records
+`cowrie.session.file_download.failed` together with the URL it was told to
+fetch, so the intelligence that matters — *which* infrastructure the bots serve
+payloads from — continues to be captured. Only the binaries stop arriving.
+
+The cost is real and should be stated rather than glossed: "what do they
+install" can be answered for 25 to 29 September and not after. That is the
+price of the rule, and the rule is worth the price.
+
 ## We published the sensor's address ourselves
 
 This document states that the machine's public address is not published. On
@@ -245,17 +255,67 @@ history-inclusive pre-commit check in the second.
 
 A rules-of-engagement document that has never been violated is usually one nobody
 has audited.
-**What is kept and what is lost.** The 65 distinct files already collected stay on the
-sensor. They are never executed, never committed (`.gitignore` covers
-`downloads/`), and never copied to the analyst's laptop (the backup script
-excludes that directory by name). From now on Cowrie records
-`cowrie.session.file_download.failed` together with the URL it was told to
-fetch, so the intelligence that matters — *which* infrastructure the bots serve
-payloads from — continues to be captured. Only the binaries stop arriving.
 
-The cost is real and should be stated rather than glossed: "what do they
-install" can be answered for 25 to 29 September and not after. That is the
-price of the rule, and the rule is worth the price.
+## Analysing what the decoys captured
+
+*Added 4 October 2026, when the static feature extraction was written.*
+
+The decoys collect files. Attackers push them over scp, and before 29 September
+the IT decoy also fetched them. Examining those files is the point of having them,
+but it is also the part of this project most able to cause harm, so the rules are
+written before the analysis rather than after.
+
+### The standing rule
+
+> **Nothing captured is ever executed. Nothing captured ever leaves the sensor.**
+
+Both halves matter and the second is the one that gets eroded by convenience. The
+files stay in `/home/cowrie/cowrie/var/lib/cowrie/downloads/` until the machine is
+deleted, and they are deleted with it.
+
+### What that means in practice
+
+**Analysis happens on the sensor; only numbers come back.** Anything needing the
+file bytes runs there and returns a table. `analysis/features-files.py` does this:
+it reads every file as bytes, computes a byte histogram, a windowed entropy
+profile and the ELF header fields, and writes one CSV. The CSV is copied to the
+laptop. The files are not.
+
+**No dynamic analysis of any kind.** No sandbox, no instrumented VM, no "just
+running it to see". This project has no safe place to do that and no need to.
+
+**Nothing is submitted to a third party.** Not the files, and **not their
+hashes**. Submitting a file to a multi-scanner publishes the file. Submitting a
+*hash* publishes the fact that this sensor collected that sample, at that time,
+which is an unnecessary disclosure about a machine whose address is deliberately
+unpublished. If a sample ever needs outside identification, that is a decision to
+take deliberately and record here, not a step taken mid-analysis.
+
+**Nothing new is installed on the decoy to enable analysis.** `features-files.py`
+uses the Python standard library only — no TLSH, no ssdeep, no compiler toolchain.
+Fuzzy hashing would cluster variants slightly better; adding three C libraries and
+a build environment to a machine whose entire purpose is to be attacked is the
+worse trade. Where a better tool is genuinely needed, the right answer is a
+different machine, not a better-equipped honeypot.
+
+**Extracted strings are treated as sensitive.** They contain attacker URLs,
+addresses and sometimes credentials. `features-files.py --strings` writes them to
+a separate file at mode 600, outside the CSV, and that file is never committed.
+
+### Why the rule is not relaxed for convenience
+
+It already was, once, and by accident. For the first four days the IT decoy
+fetched payloads from attacker-controlled hosts because Cowrie does that by
+default — 153 outbound connection attempts against a document that said it never
+would. It was found by reading the logs properly rather than by any alarm, and it
+is written up under *The outbound download problem*.
+
+The lesson that applies here: a rule in a document stops nothing on its own. The
+outbound rule is now a packet filter, which cannot be undone by forgetting. The
+rule above is enforced the same way — the decoy accounts cannot open outbound
+connections at all, so a script running as `cowrie` or `conpot` could not submit
+a file anywhere even if it tried. What the rule adds is the part a firewall cannot
+express: that the analyst does not do it either.
 
 ## If something goes wrong...
 
