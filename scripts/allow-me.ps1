@@ -36,6 +36,24 @@ if ($ip -notmatch '^\d{1,3}(\.\d{1,3}){3}$') {
     throw "Not an IPv4 address: '$ip'. Refusing to put that in a firewall rule."
 }
 
+# The pattern above still admits octets over 255, and any address that is not
+# public. A captive portal, a proxy or a VPN can return one, and writing it
+# into the rule locks this laptop out of the VM -- the verification at the end
+# will not catch it, because the rule was set to exactly what we asked for.
+$octets = [int[]]($ip -split '\.')
+if ($octets | Where-Object { $_ -gt 255 }) {
+    throw "Not a valid IPv4 address: '$ip'. Refusing to put that in a firewall rule."
+}
+if ($octets[0] -eq 0 -or
+    $octets[0] -eq 10 -or
+    $octets[0] -eq 127 -or
+    ($octets[0] -eq 169 -and $octets[1] -eq 254) -or
+    ($octets[0] -eq 172 -and $octets[1] -ge 16 -and $octets[1] -le 31) -or
+    ($octets[0] -eq 192 -and $octets[1] -eq 168) -or
+    ($octets[0] -eq 100 -and $octets[1] -ge 64 -and $octets[1] -le 127)) {
+    throw "'$ip' is not a public address. The lookup probably went through a portal, proxy or VPN. Refusing to put that in a firewall rule."
+}
+
 Write-Host "This laptop is $ip"
 
 $current = az network nsg rule show --subscription $Subscription `
