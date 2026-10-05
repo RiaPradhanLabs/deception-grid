@@ -749,6 +749,93 @@ Two lessons, and the second is the general one:
 
 ---
 
+## The control was working. The alarm said it was not.
+
+`analysis/figures.sh` ends with a section headed *the figure that must be zero*.
+It existed because this project had already let the decoy reach the internet for
+four days without noticing, and the whole point was that it could never happen
+again unnoticed. On 5 October it printed:
+
+```
+outbound fetches since the block   455   *** THE BLOCK IS NOT HOLDING ***
+Stop. Do not publish any figure until this is explained.
+```
+
+The block was holding. Here is the query:
+
+```sql
+SELECT COUNT(*) FROM v_events
+WHERE eventid LIKE 'cowrie.session.file_%'
+  AND json_extract(raw,'$.url') IS NOT NULL
+  AND ts > '2026-09-29T12:00:00';
+```
+
+`cowrie.session.file_%` matches `file_download.failed`, and a blocked outbound
+fetch is logged as `file_download.failed` **carrying the URL it tried**. So the
+control working correctly produced every one of the 455 events that the alarm
+reported as the control failing. Checked before anything was changed: all 455
+are `.failed`, **none records a `shasum` or an `outfile`**, so nothing was ever
+retrieved. 24 destinations at the time of checking.
+
+**This is worse than a wrong number, and the reason is the sentence underneath
+it.** *Do not publish any figure until this is explained* is a correct
+instruction attached to a condition that was permanently true. An alarm that
+fires every single run is not a control; it is training. Everybody learns to
+scroll past it, and what they have actually learned is to scroll past that
+section — including on the day it is right.
+
+The same document already names this failure mode in the other direction: a
+dashboard that is green because the query behind it silently returns nothing. A
+dashboard that is red because the query counts the wrong rows ends in the same
+place, by a route that feels more responsible on the way.
+
+**The fix is two numbers, because there were always two questions.**
+
+```
+outbound fetches that SUCCEEDED    0     must be zero
+fetch attempts BLOCKED             505   expected to grow
+distinct URLs attempted            34
+```
+
+The first is scoped to `cowrie.session.file_download` exactly and requires a
+`shasum` or an `outfile`, so an attempt cannot be read as a retrieval and an
+upload carrying a URL cannot be read as a fetch. The second is the evidence the
+control is alive and being exercised, which is a stronger claim than a zero —
+and **zero blocked attempts now prints its own warning**, because that would mean
+either that nobody is asking the decoy to fetch anything any more or that the
+logging of failures has stopped.
+
+Both halves were tested against a stand-in database before shipping: the success
+query returns 0 for the real population, ignores a pre-block success and an
+upload, and returns 1 when a genuine post-block retrieval is inserted. **A guard
+that cannot fire is the other half of this defect**, and testing only that an
+alarm stays quiet proves nothing about whether it still works.
+
+What generalises, for a GRC audience:
+
+> **A control and the alarm on that control are two separate things, and each
+> needs its own evidence.** The block had been verified against the packet
+> filter. The alarm on it had never been verified at all — it had only ever been
+> read, and it looked right.
+
+## How fast these figures move
+
+Two runs of `figures.sh` twenty minutes apart, 5 October:
+
+| | 14:55 | 15:02 |
+| --- | --- | --- |
+| files held in downloads/ | 136 | 138 |
+| distinct hashes recorded in the log | 83 | 85 |
+| fetch attempts blocked | 455 | 505 |
+| distinct URLs attempted | 24 | 34 |
+
+Fifty blocked attempts, two new captures and ten new destinations in twenty
+minutes. Every figure in every document is a snapshot, the as-of line is not
+decoration, and this is the argument for freezing figures on one date rather than
+refreshing them whenever a document is edited.
+
+---
+
 ## Corrections owed to this document
 
 **The morning addendum's analyst-exclusion paragraph is superseded.** It ends
