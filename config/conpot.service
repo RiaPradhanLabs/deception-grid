@@ -16,7 +16,7 @@ RestartSec=5
 # The plan recorded earlier in this build was systemd socket activation, the
 # same mechanism Cowrie uses for 22 and 23. That was an ASSUMPTION and it is
 # withdrawn. Cowrie supports inherited sockets explicitly -- cowrie.cfg refers
-# to them by index -- and nothing establishes that Conpot 0.6.0 does. Building
+# to them by index -- and nothing establishes that Conpot 1.0.0 does. Building
 # on an unverified application feature is how several errors on this project
 # started.
 #
@@ -29,6 +29,24 @@ RestartSec=5
 # on analysis grounds rather than security ones: the logged dst_port would
 # become 5020, and the whole comparison in this project is IT door against OT
 # door by dst_port. The port a scanner knocked on IS the finding.
+#
+# --- Which version this is, settled 5 October 2026 ----------------------------
+#
+# The installed package is the upstream **v1.0.0 tag**, commit
+# c9245e6cb0fe7166298068dc983f273ad282f0de, installed from git. Evidence:
+# direct_url.json in conpot-0.6.0.dist-info records url, vcs git,
+# requested_revision v1.0.0 and that commit id.
+#
+# It SELF-REPORTS 0.6.0 -- in the startup banner, in every JSON record, and in
+# the dist-info directory name -- because upstream never bumped the version
+# string at that tag. Those three are ONE claim restated, not three sources
+# agreeing, and that is exactly how they were briefly mistaken for
+# confirmation.
+#
+# Commit c9245e6 is the identifier to quote. An earlier commit changed this
+# comment to 0.6.0 on the strength of the self-report; that was wrong and is
+# reverted here. Reasoning about shipped behaviour must use the tag, not the
+# string the package prints about itself.
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
