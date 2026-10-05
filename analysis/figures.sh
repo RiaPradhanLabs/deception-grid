@@ -59,20 +59,50 @@ else
   echo "  downloads directory not readable -- run with sudo"
 fi
 d=$(sqlite3 decoy.sqlite "SELECT COUNT(DISTINCT json_extract(raw,'\$.shasum')) FROM v_events WHERE eventid LIKE 'cowrie.session.file_%' AND json_extract(raw,'\$.shasum') IS NOT NULL;" 2>/dev/null)
-echo "  distinct content by hash          ${d:-?}"
-echo "  ^ these two differ on purpose: redirection captures are named"
-echo "    redir_<uuid>, so the file count exceeds the distinct content."
+echo "  distinct hashes Cowrie RECORDED   ${d:-?}"
+echo "  ^ this is from the LOG, not from the disk: it counts shasum values"
+echo "    Cowrie wrote down, which exist only where Cowrie hashed something."
+echo "    analysis/features-files.py hashes every file on disk and gets a"
+echo "    LARGER number, because redirection captures have content Cowrie"
+echo "    never hashed. The two are different populations, both correct."
+echo "    On 5 October 2026: 83 here, 88 on disk, 136 files. Say which you"
+echo "    mean. This line used to read 'distinct content by hash', which is"
+echo "    what the disk figure measures, not this one."
 echo "    Never quote the file count as a number of samples."
 
 # --- 4. the one figure that must be zero --------------------------------
+#
+# Corrected 5 October 2026. The original query counted every
+# cowrie.session.file_* event carrying a URL after the block went in. That
+# pattern matches file_download.failed -- which is precisely what the block
+# PRODUCES. So the control working generated 455 events the alarm reported as
+# "THE BLOCK IS NOT HOLDING", with the instruction "do not publish any figure
+# until this is explained". A guard that fires permanently is a guard people
+# stop reading, and this one would have blocked every figure in the project.
+#
+# Two numbers now, because they answer different questions:
+#   SUCCEEDED  must be zero. A retrieved file means the block failed.
+#   BLOCKED    expected to be large and growing. It is the evidence the
+#              control is live and being exercised. Zero here is ALSO worth
+#              a look: it means nobody is asking any more, or logging broke.
 echo
 echo "--- the figure that must be zero ------------------------------"
-z=$(sqlite3 decoy.sqlite "SELECT COUNT(*) FROM v_events WHERE eventid LIKE 'cowrie.session.file_%' AND json_extract(raw,'\$.url') IS NOT NULL AND ts > '2026-09-29T12:00:00';" 2>/dev/null)
+z=$(sqlite3 decoy.sqlite "SELECT COUNT(*) FROM v_events WHERE eventid = 'cowrie.session.file_download' AND json_extract(raw,'\$.url') IS NOT NULL AND (json_extract(raw,'\$.shasum') IS NOT NULL OR json_extract(raw,'\$.outfile') IS NOT NULL) AND ts > '2026-09-29T12:00:00';" 2>/dev/null)
+b=$(sqlite3 decoy.sqlite "SELECT COUNT(*) FROM v_events WHERE eventid = 'cowrie.session.file_download.failed' AND ts > '2026-09-29T12:00:00';" 2>/dev/null)
+h=$(sqlite3 decoy.sqlite "SELECT COUNT(DISTINCT json_extract(raw,'\$.url')) FROM v_events WHERE eventid = 'cowrie.session.file_download.failed' AND ts > '2026-09-29T12:00:00';" 2>/dev/null)
 if [ "${z:-1}" = "0" ]; then
-  echo "  outbound fetches since the block   0   (correct)"
+  echo "  outbound fetches that SUCCEEDED    0   (correct -- this is the one that must be zero)"
 else
-  echo "  outbound fetches since the block   $z   *** THE BLOCK IS NOT HOLDING ***"
+  echo "  outbound fetches that SUCCEEDED    $z   *** THE BLOCK IS NOT HOLDING ***"
   echo "  Stop. Do not publish any figure until this is explained."
+  echo "  A retrieved file after 2026-09-29T12:00:00 is an incident, not a figure."
+fi
+echo "  fetch attempts BLOCKED             ${b:-?}   (expected to grow; this is the control working)"
+echo "  distinct URLs attempted            ${h:-?}"
+if [ "${b:-0}" = "0" ]; then
+  echo "  ^ zero blocked attempts is also worth checking: either nobody is"
+  echo "    asking the decoy to fetch anything any more, or the logging of"
+  echo "    failed downloads has stopped. Both are findings."
 fi
 
 # --- 5. where each figure lives -----------------------------------------
