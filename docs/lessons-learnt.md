@@ -303,3 +303,198 @@ headline set: 1,030 distinct sources, 34,427 password attempts, 285 sources that
 got all the way in, 153 outbound connections in the four days before they were
 blocked, 67 distinct captured files, and 18 attempts to use the machine as a
 relay — every one refused.*
+
+
+---
+
+# Addendum — 5 October 2026
+
+Added the day before the OT door opened. The body of this document is as at
+29 September 2026, 17:25 UTC and is unchanged; this section records what one
+further working session added, in the same sections, so the original's as-at
+date stays meaningful.
+
+Three of the four mistakes in this session were found the same way as the
+original eight — by looking at the rows rather than the totals, or at the
+directory rather than the file.
+
+## Addition to the one rule
+
+The rule holds, with a sibling that cost two documents and a wrong procedure:
+
+> **Before acting on a procedure, list the repository.**
+
+A `ufw` command for opening the OT door was worked out from first principles
+while `docs/opening-the-ot-door.md` sat in the repository unread. The derived
+command was half the procedure — ufw without the NSG — which that runbook
+itself warns produces a door that looks open and is not. In the same session
+two documents were written before noticing one of them already existed. One
+`git ls-files` would have prevented all of it.
+
+The structural reason is the same as the one above. A file you have not listed
+looks exactly like a file that does not exist.
+
+## On tools
+
+**A warning is not harmless until you trace what reads its exit status.**
+`tar: file changed as we read it` is genuinely benign for the archive — the next
+tarball carries the file complete — and it was dismissed as cosmetic twice, once
+in writing. It was not benign for the script. GNU tar exits **1** on that
+warning, and the remote command was `sudo tar ... && sudo chown ...`. Exit 1
+short-circuited the `&&`, so the `chown` never ran, the archive stayed
+root-owned, and `/tmp`'s sticky bit then refused the cleanup `rm`. A
+cosmetic-looking exit code disabled a step two lines later. Classify a warning
+by what reads its exit status, not by what it says about the data: any
+`command-that-warns && cleanup` is this defect waiting for a warning to occur.
+
+This belongs beside *prefer loud failure to silent success*, and the mechanism
+is worth distinguishing — here the failure was announced on stdout and still
+invisible, because the thing that broke was two lines away from the thing that
+printed.
+
+**When the failing condition is not yours to summon, construct it in isolation.**
+The replacement guard had to tolerate tar's exit 1 and throw on exit 2. A live
+run demonstrated only the first half, and only by luck, because tar exited 0
+that time. Rather than wait for the warning to recur, the assumption underneath
+the guard was tested directly: `ssh host 'exit 1'` and `ssh host 'exit 2'`
+returned 1 and 2. That proved both branches and the load-bearing premise that
+ssh propagates remote exit codes at all — had it swallowed them, the guard could
+never have fired and would have looked like it worked. This extends *test
+against observed data*, which is about inputs, to the case where the trigger is
+external.
+
+**A byte-count delta proves an edit was surgical.** After a one-line change the
+file went 4,499 → 4,517 bytes: exactly the 18-byte difference between the old
+line and the new one. One number established that no editor had added a
+byte-order mark and that nothing else had moved. Worth doing after any edit made
+in a tool that might reformat, re-encode or re-line-end a file it was asked to
+change one line of.
+
+## On controls
+
+**Unlink permission depends on the directory, not the file.** The obvious
+repairs to the cleanup failure above were to change `&&` to `;`, or to tolerate
+exit 1 before chowning. Both would have left the cleanup depending on a `chown`
+succeeding. Staging the archive in a directory the ssh user owns, at mode
+`0700`, made deletion independent of who `tar` ran as — the fragile link stopped
+mattering rather than being patched, and the `0700` removed an exposure as a
+side effect. In the spirit of *enforce at the layer that cannot be quietly
+undone*: when a fix must keep working unattended for two months, prefer the
+change that deletes the failure mode to the change that handles it. Ask what the
+operation actually depends on; it is often not what the code appears to be
+managing.
+
+**The exposure mattered more than the leftover.** The uncleaned archive was mode
+644 in a world-readable directory **on the honeypot itself** — a complete copy
+of the collection readable by any local account on the one machine deliberately
+exposed to the internet. Cowrie is medium-interaction so no attacker gets a real
+shell and the practical risk was low, but the exposure was unnecessary and
+unseen. It was also **intermittent**, firing only when an attacker happened to
+be active during the archive window: two runs in five that morning, and one
+orphan in ten days of uptime. A fault conditional on external timing will not
+appear in testing and will appear in the data. Reason about the mechanism rather
+than trying to reproduce it.
+
+## On the honeypots themselves
+
+**Configured is not proven.** This document already records that the OT
+honeypot shipped with event recording disabled and pointing at an unwritable
+path, and that it was fixed. What remained unverified until 5 October is that
+the corrected configuration had ever written anything: `conpot.json` held
+**zero records**, so the write path had never once run.
+
+One loopback Modbus frame — an ordinary read-holding-registers request, function
+3, unit 1, one register — produced three records and proved the whole chain. The
+reply decoded as function `03` rather than `83`, so no exception; the record
+carried `sensorid decoy-01-ot`, `dst_port 502`, the function code, and
+`public_ip: null`, confirming that `fetch_public_ip = False` really does leave
+it empty. It also rendered a `last event` line in `decoy-status` that had never
+executed, because there had never been a record to show.
+
+Before a collection window opens, exercise the collection path end to end with
+synthetic input you can identify and exclude afterwards. *Test from the outside
+before opening the door* covers the wire; this covers the record. Fixing a
+default is not the same evidence as watching it work.
+
+## On documentation
+
+**Artefact filenames need the zone discipline already applied to figures.**
+*Timestamp every figure at the point of generation* is in this document and is
+about figures. The same applies to artefact names, for a harder reason. Tarball
+names were local Austrian time while every timestamp inside them was UTC — a
+two-hour gap between a file's label and its contents. The forcing reason was not
+tidiness: Austria returns to CET on **25 October 2026**, inside the collection
+window, which would produce an hour that occurs twice and two distinct archives
+competing for one name.
+
+Two things mattered more than the rename. The laptop and sensor clocks were
+checked to agree in UTC first, because an offset clock would have produced names
+that were confidently wrong rather than consistently shifted. And `ingest.py`
+was checked for filename parsing before anything changed — it derives dates only
+from record contents, so the changeover could not reach the dataset. Pick UTC,
+mark it in the name, keep the authoritative timestamp inside the record, and
+before changing a naming scheme find everything that parses the name.
+
+Filenames from `decoy-2026-10-05-0346Z.tar.gz` onward are UTC with a `Z`
+suffix. Earlier names were deliberately not changed, by *keep the wrong
+versions*; the boundary is recorded rather than erased.
+
+## Additions to *what I would do differently*
+
+**Read the repository's file list before acting on any procedure.** See the
+addition to the one rule above.
+
+**Make the exclusion list a function of the policy, not a list of instances.**
+This is *a control written against an instance is not a policy*, applied to data
+rather than to firewalls. `exclude-ips.txt` names specific addresses while the
+residential address rotates daily, so the list cannot keep pace by hand — and
+`allow-me.ps1` already learns each new address without recording it anywhere.
+Separately, excluding a bare address *permanently* over-excludes: a residential
+IP that was ours in September may be reassigned to someone whose scan is genuine
+data. Address-plus-date-range is the defensible form.
+
+## Additions to *what I still do not know*
+
+**Whether the IPv4-only bound limits the comparison more than expected.** Both
+decoys bind `0.0.0.0` — verified 5 October by `ss -lntp` — so the v6 ufw rules
+on 22, 23 and 502 are inert and no IPv6 scanner reaches either door. This was a
+candidate confound and turns out not to be one, which is the good outcome: both
+doors face the same internet, and the limitation is symmetric. But it bounds the
+population, and by how much is unknown.
+
+**Whether Conpot's listen backlog of 100 has ever refused a connection.** Cowrie
+and sshd use 4096. Probably ample at Modbus scan rates, but a burst beyond it
+means refused connections, and a refused connection is data never recorded.
+Unmeasured, and it will not announce itself.
+
+## Two corrections owed to other documents in this repository
+
+**`docs/opening-the-ot-door.md`, closing section** — *"`exclude-ips.txt` already
+holds your addresses."* It does not hold the current one, and the address
+rotates daily. Steps 5 and 6 assume `ingest.py` filters the analyst's own test
+connection through that file; it will not, and the day-one OT dataset would
+record the analyst as a genuine external source. The address `allow-me.ps1`
+reports must be appended to `exclude-ips.txt` before step 5, and `ingest.py`
+re-run. **Still outstanding at the time of writing.**
+
+**`config/conpot.cfg`, the `fetch_public_ip` comment** — stated that the
+29 September outbound reject rule covered uid 1001 only, and reasoned from there
+that the setting was the only thing preventing an outbound connection. Both uids
+are rejected in `ufw-before-output`, verified against the packet filter, and
+that chain is evaluated ahead of ufw's user rules so a later `ufw allow out`
+cannot override it. **Corrected** in commit `f84e6ec`, as an insert above the
+original paragraph rather than a rewrite of it, leaving the earlier reasoning
+visible.
+
+Both are instances of a lesson already in this document — *reading a rule tells
+you intent, counting the thing it prevents tells you it works* — found in our
+own documents rather than in a vendor's.
+
+---
+
+*Addendum figures are as at 5 October 2026, 05:40 UTC: 455,524 Cowrie events
+across 11 rotated log files, 2,183 distinct sources, 136 captured files, 132 TTY
+recordings, and 3 OT records, all three from the loopback probe described above.
+Event arrival rate over that morning varied from roughly 29 to 79 per minute,
+nearly threefold within four hours, which is worth stating rather than averaging.
+`ingest.py` remains the figure to quote.*
