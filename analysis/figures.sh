@@ -140,6 +140,16 @@ cat <<'MAP'
     - hook, speed, passwords, origins slides
     - CAVEAT TO KEEP: origins are REGISTRATION, not location, and the
       percentages are of all arrivals so they will not sum to 100.
+    - correction slide: "N of M recorded attempts -- one in K" for the
+      mis-recorded credentials. ADDED TO THIS MAP 5 October 2026: it was
+      not listed, so its ratio drifted unwatched from 4,722/38,247 to
+      10,171/80,845 -- one in eight became nearer one in nine. A figure
+      that is not on this map is a figure nobody is refreshing.
+    - err-rule slide: the version count and the recovered-attempt count.
+      Six versions as of 5 October 2026, 22 attempts recovered.
+    - err-tty slide: deliberately carries NO figure on its face. Its
+      numbers live in its speaker notes under a 9 December refresh
+      marker, because every one of them moves daily.
 
   ALWAYS, in every document:
     - lead with distinct sources, never events
