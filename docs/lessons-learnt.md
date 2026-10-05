@@ -818,6 +818,50 @@ What generalises, for a GRC audience:
 > filter. The alarm on it had never been verified at all — it had only ever been
 > read, and it looked right.
 
+### Where that alarm actually came from, found by auditing rather than remembering
+
+The account above blames the query in `figures.sh`. That is where the defect
+*was*, and it is not where it came from. Found a few hours later, by reading
+`weekly.sql` on the suspicion that a query-pattern bug would not be alone:
+
+**Query 13 in `weekly.sql` had it right all along.** It tests the eventid as well
+as the url, and reports `FETCHED - outbound` separately from
+`fetch failed - outbound`:
+
+```sql
+WHEN json_extract(raw, '$.url') IS NOT NULL
+     AND eventid = 'cowrie.session.file_download'    THEN 'FETCHED - outbound'
+WHEN json_extract(raw, '$.url') IS NOT NULL          THEN 'fetch failed - outbound'
+```
+
+**The comment four lines above it did not:**
+
+```
+url present            we went and got it. OUTBOUND. Must be zero for any
+                       timestamp after the block went in on 29 Sept 12:00.
+```
+
+`figures.sh` implemented the comment. The correct logic was four lines below, in
+the same file, and nobody re-derived the rule from the SELECT because a comment
+stated it plainly — which is what comments are for.
+
+> **A correct implementation with a wrong prose summary beside it is more
+> dangerous than no summary at all, because the next thing built is built from
+> the summary.**
+
+The same wrong discriminator had propagated into the deck's `err-figures`
+speaker notes, as the line *"the event carries a url field only when our machine
+went and fetched something"*. Corrected in all three places on 5 October.
+`docs/rules-of-engagement.md` was checked and was already right: it reports
+fetches and failures as separate figures, so the correct understanding existed in
+September and was lost in the summarising, not in the analysis.
+
+This is the counterpart to a rule already in this document. *When a thing moves,
+go and look at everything that names it* is about a fact that changed. This is
+about a fact that never changed and was written down wrongly once: **go and look
+at what the code does, not at what the comment says it does — especially when the
+comment is the more convenient of the two to read.**
+
 ## How fast these figures move
 
 Two runs of `figures.sh` twenty minutes apart, 5 October:
