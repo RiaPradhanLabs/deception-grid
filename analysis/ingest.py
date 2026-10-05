@@ -30,6 +30,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 
 HERE     = os.path.dirname(os.path.abspath(__file__))
 DB       = os.environ.get('DECOY_DB', os.path.join(HERE, 'decoy.sqlite'))
@@ -59,8 +60,59 @@ CONSOLE_WORDS = {'enable', 'system', 'shell', 'sh', 'linuxshell',
                  'su', 'exit', 'quit', 'help'}
 
 
+def decode_escapes(value):
+    """Turn the literal \\xNN escape text back into the characters it stands for.
+
+    Version six, 5 October 2026. Every earlier version DELETED the escapes.
+    That is wrong for a credential which is non-ASCII all the way through,
+    because Cowrie writes each UTF-8 byte of it as its own escape:
+
+        \\xd1\\x81\\xd1\\x82\\xd0\\xbe\\xd0\\xbb          ->  '\u0441\u0442\u043e\u043b'
+        \\xe5\\x90\\xb4\\xe5\\x85\\x86\\xe9\\xa3\\x9e  ->  '\u5434\u5146\u98de'
+
+    Delete the escapes and nothing readable is left, so the row was called
+    `artefact-binary`. Decode them and it is an ordinary login attempt with a
+    Cyrillic or CJK username. Verified against the database BEFORE this was
+    written, by running both rules side by side over the stored rows: 22
+    attempts across four usernames moved to real, 10,127 stayed excluded, and
+    nothing moved the other way.
+
+    Literal characters pass through as themselves, so a field mixing the two
+    works. A byte that is not valid UTF-8 decodes to U+FFFD, which
+    `printable_part` then drops -- an undecodable byte is not readable content,
+    which is the same answer deletion gave.
+    """
+    if not value:
+        return ''
+    out, i = bytearray(), 0
+    while i < len(value):
+        m = ESCAPED_BYTE.match(value, i)
+        if m:
+            out.append(int(m.group(0)[2:], 16))
+            i = m.end()
+        else:
+            out.extend(value[i].encode('utf-8', 'surrogatepass'))
+            i += 1
+    return out.decode('utf-8', 'replace')
+
+
 def printable_part(value):
-    return ESCAPED_BYTE.sub('', value or '').replace('\ufeff', '').strip()
+    """What a human could read in a credential field.
+
+    Decode the escapes, then drop what is genuinely unreadable: control
+    characters, and U+FFFD standing in for bytes that were not valid UTF-8.
+    `str.isprintable()` is the test, NOT an ASCII range -- see version four in
+    `exclusion_reason`, where `32 <= ord(c) < 127` rejected '\u03a9' and Cyrillic
+    and had to be taken out twice.
+
+    The change is one-directional by construction: decoding can only turn an
+    escape run into more readable text than deleting it did, never less. That
+    is why the preview over the stored rows found 22 rows moving one way and
+    none the other, and `--selftest` keeps it that way.
+    """
+    decoded = decode_escapes(value).replace('\ufeff', '')
+    return ''.join(c for c in decoded
+                   if c.isprintable() and c != '\ufffd').strip()
 
 
 BYTES_REPR = re.compile(r"^b(['\"])(.*)\1$", re.S)
@@ -372,8 +424,9 @@ def exclusion_reason(event, own):
     goes in the documentation, because the exclusion list is part of the result
     and not an implementation detail.
 
-    The artefact rule took three attempts and the failures are the argument for
-    how it is written now.
+    The artefact rule took SIX attempts and the failures are the argument for
+    how it is written now. Each one is kept below, because every version was
+    broken in a way that looked right until the excluded rows were read.
 
     Version one tested for a real NUL byte in either field and matched NOTHING,
     because Cowrie writes a non-printable byte as the literal text of a C escape
@@ -394,6 +447,23 @@ def exclusion_reason(event, own):
     is not enough; what is left after the escapes are stripped has to be a
     console word, or empty, or unreadable. Tested against all 18 distinct cases
     observed in the first four days.
+
+    Version six, 5 October 2026, is in `decode_escapes` rather than here. Every
+    version up to five DELETED the escape text before asking whether anything
+    readable remained. For a username that is non-ASCII all the way through,
+    Cowrie writes every UTF-8 byte as its own escape, so deletion leaves an
+    empty string and the row is called binary. `стол`, `имени`, `столШаблоны`
+    and `吴兆飞` -- 22 attempts, each with an ordinary readable password -- were
+    being thrown away on that basis. Decoding the escapes instead of deleting
+    them separates them from `\\x04\\x19\\x19\\x02`, which decodes to four
+    control characters and still strips to nothing.
+
+    The five earlier versions were each found by reading rows. This one was
+    found by reading rows AND checked before it was written, by running both
+    rules side by side over the stored data: 22 attempts moved to real, 10,127
+    stayed excluded, nothing moved the other way. `--selftest` now pins every
+    case listed in this docstring so that version seven cannot quietly bring
+    one of them back.
     """
     src = event.get('src_ip')
     if src == '127.0.0.1':
@@ -456,6 +526,11 @@ def exclusion_reason(event, own):
             # Escapes are already gone by this point, so anything left is a
             # literal character somebody typed, and str.isprintable() is exactly
             # the question worth asking about it.
+            # `printable_part` already drops everything unprintable, so the
+            # second test cannot fail as things stand. It is kept as a tripwire:
+            # if that function is ever changed back to deleting escapes rather
+            # than decoding them, this is the line that states what the rule
+            # actually requires.
             def readable(value):
                 return bool(value) and value.isprintable()
 
@@ -811,5 +886,102 @@ def main():
                 os.chown(p, int(uid), int(gid))
 
 
+def selftest():
+    """Pin every case the artefact rule has ever got wrong.
+
+    One row per case, each traceable to a sentence in `exclusion_reason`'s
+    docstring or to the 5 October preview over the stored data. Credential
+    fields are written as Cowrie writes them -- the LITERAL characters of a C
+    escape -- so the strings here are raw, and `r'daemon\\x00'` is eight
+    characters, not seven.
+
+    Touches no database and reads no log. Run it before shipping any change to
+    the rule, and after.
+    """
+    own = OwnAddresses(set(), {})
+
+    cases = [
+        # (username, password, expected reason, why this case exists)
+        ('root', 'admin', None,
+         'no escape anywhere -- must not even enter the branch'),
+        (r'daemon\x00', '', None,
+         'version four: a real account name with a trailing null, empty '
+         'password is an ordinary probe'),
+        (r'root\x00', '7ujMko0admin', None,
+         'version two over-corrected and threw this out -- a known camera '
+         'default'),
+        (r'root\x00', 'blender', None,
+         "version two: 'blender' and 'enable' are the same shape to a pattern"),
+        (r'telnetadmin\x00', 'telnetadmin', None,
+         'version two: a real credential pair arriving with a trailing null'),
+        (r'root\x00', 'Ω', None,
+         'version four regression: an ASCII range test rejected this'),
+        (r'\x1b\x11ECFF', r'\x1b\x13\x04\x1a\x1f\x18', 'artefact-binary',
+         'version five: username strips to ECFF, but the password field was '
+         'non-empty in the log and strips to nothing'),
+        (r'\x04\x19\x19\x02', r'\x04\x19\x19\x02', 'artefact-binary',
+         'control bytes only -- decodes, but to nothing printable'),
+        (r'enable\x00', r'system\x00', 'artefact-command',
+         'both fields are console words: the telnet handler read commands as '
+         'a login pair'),
+        (r'\xd1\x81\xd1\x82\xd0\xbe\xd0\xbb', 'abc', None,
+         "version six: 'стол' -- escapes decode to Cyrillic"),
+        (r'\xd0\xb8\xd0\xbc\xd0\xb5\xd0\xbd\xd0\xb8', 'heslo', None,
+         "version six: 'имени'"),
+        (r'\xd1\x81\xd1\x82\xd0\xbe\xd0\xbb\xd0\xa8\xd0\xb0\xd0\xb1\xd0\xbb'
+         r'\xd0\xbe\xd0\xbd\xd1\x8b', '654321', None,
+         "version six: 'столШаблоны' -- two folder names concatenated"),
+        (r'\xe5\x90\xb4\xe5\x85\x86\xe9\xa3\x9e', 'kian', None,
+         "version six: '吴兆飞' -- three-byte UTF-8, CJK"),
+        (r'\xd1\x81\xd1\x82\xd0\xbe\xd0\xbb', r'\x04\x19\x19\x02',
+         'artefact-binary',
+         'a readable username does not rescue a password that was non-empty '
+         'and decodes to nothing'),
+    ]
+
+    failures = 0
+    print()
+    print('artefact rule self-test, %d cases' % len(cases))
+    print()
+    for user, pw, expected, why in cases:
+        event = {'src_ip': '198.51.100.7',
+                 'eventid': 'cowrie.login.failed',
+                 'timestamp': '2026-10-05T09:00:00.000000Z',
+                 'username': user,
+                 'password': pw}
+        got = exclusion_reason(event, own)
+        ok = got == expected
+        if not ok:
+            failures += 1
+        print('  %-4s %-46r %-30r' % ('ok' if ok else 'FAIL', user, pw))
+        print('       expected %-18s got %-18s' % (expected, got))
+        print('       %s' % why)
+        if not ok:
+            print('       decoded user %r -> %r'
+                  % (decode_escapes(user), printable_part(user)))
+            print('       decoded pass %r -> %r'
+                  % (decode_escapes(pw), printable_part(pw)))
+        print()
+
+    # Loopback and analyst are the other two reasons; cheap to pin here too.
+    for src, expected in (('127.0.0.1', 'loopback'), ('198.51.100.7', None)):
+        got = exclusion_reason({'src_ip': src, 'eventid': 'cowrie.session.connect',
+                                'timestamp': '2026-10-05T09:00:00.000000Z'}, own)
+        ok = got == expected
+        if not ok:
+            failures += 1
+        print('  %-4s src_ip %-16s expected %-10s got %s'
+              % ('ok' if ok else 'FAIL', src, expected, got))
+
+    print()
+    if failures:
+        print('%d CASE(S) FAILED. Do not ship the rule.' % failures)
+        return 1
+    print('all cases pass')
+    return 0
+
+
 if __name__ == '__main__':
+    if '--selftest' in sys.argv[1:]:
+        sys.exit(selftest())
     main()
