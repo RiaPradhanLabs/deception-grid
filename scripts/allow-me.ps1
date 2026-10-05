@@ -56,6 +56,16 @@ if ($octets[0] -eq 0 -or
 
 Write-Host "This laptop is $ip"
 
+# Record every address this laptop has held, with the time it was seen. Not an
+# exclusion list: exclude-ips.txt names addresses that appeared in a decoy log,
+# and on 5 October 2026 neither of that day's addresses had. Excluding an
+# address that never appeared is over-exclusion, and a residential address
+# reassigned to someone else would silently drop their genuine scans. What a
+# correct exclusion needs is an address AND the window we held it, which is
+# what this file accumulates. ingest.py does not read it yet.
+$SeenLog = Join-Path $HOME 'deception-grid\analyst-addresses.log'
+Add-Content -Path $SeenLog -Value ('{0} {1}' -f [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'), $ip)
+
 $current = az network nsg rule show --subscription $Subscription `
     --resource-group $ResourceGroup --nsg-name $Nsg --name $Rule `
     --query 'sourceAddressPrefix' --output tsv
