@@ -22,7 +22,7 @@ None were found by reading totals. A wrong total looks exactly like a right one.
 | 4 | `figures.sh` | sensor | Refreshes the database, runs every query, prints an as-of line and the figure map. **Use this, not the queries directly, whenever a number is going into a document.** |
 | 5 | `geo-lookup.sh` | sensor | Fills `geo.sqlite` for query 17. Optional; queries 1–16 work without it. |
 | 6 | `features-files.py` | **sensor only** | Static features of the captured files → one CSV. |
-| 7 | `features-tty.py` | **laptop** | Keystroke timing from the TTY recordings → one CSV. |
+| 7 | `features-tty.py` | laptop or sensor | Command timeline per TTY recording → one CSV. NOT keystroke timing; see below. |
 | 8 | `exclude-ips.txt.example` | — | The format for `exclude-ips.txt`, which is never committed. |
 
 ---
@@ -41,6 +41,41 @@ already stored had changed happened twice before this was built.
 Conpot's records need normalising on the way in: `event_type` is **null** on
 protocol records, and `request` is a Python bytes *repr* stored as a JSON string.
 Both are handled, and both were found by reading values rather than keys.
+
+### Which addresses count as ours
+
+Two files, and they are not interchangeable.
+
+`exclude-ips.txt` is the hand-maintained list of bare addresses. It carries no
+dates, so every address in it is excluded **for all time**. Mode 600, never
+committed; `exclude-ips.txt.example` documents the format.
+
+`analyst-addresses.log` is written by `allow-me.ps1` on every run, one line of
+`<UTC> <address>`, since 5 October 2026. From it, `ingest.py` gives each address
+a **window**: ours from its first observation until the first observation of a
+different address, with the latest address running open-ended.
+
+The reason is over-exclusion. A residential address rotates, and one excluded
+permanently may belong to a real scanner next month — whose traffic would then
+be discarded as ours, with nothing in the output to show it had been.
+
+Two things the run output tells you, and both matter:
+
+- **window checks: N inside, N outside, N undated.** If every check is undated,
+  the event timestamp is not being read and the windows are doing nothing. The
+  first version of this code had exactly that bug — it read `event.get('ts')`,
+  but `ts` is only the database column and the event dict carries `timestamp`.
+- **MALFORMED n line(s).** An unparsed history is indistinguishable from no
+  rotations, so bad lines are counted rather than skipped.
+
+The honest limitation, printed on every run: the history only begins on
+5 October 2026. The addresses already in `exclude-ips.txt` stay unbounded,
+because nothing recorded when they were held and inventing windows would be
+worse than saying so.
+
+Adding a new address to `exclude-ips.txt` still works and is still safe. It is
+simply blunter than letting the log do it, and if an address is in both files
+the unbounded entry wins — the run output warns when that happens.
 
 ## weekly.sql
 
@@ -94,31 +129,63 @@ teardown or the analysis becomes impossible rather than merely undone.
 
 ## features-tty.py
 
-Runs on the **laptop**, against an extracted backup tarball — the recordings are
-under `home/cowrie/cowrie/var/lib/cowrie/tty/` inside it.
+Runs on the **laptop or the sensor** — pure parsing, no access to anything live.
+On the laptop, against an extracted backup tarball: the recordings are under
+`home/cowrie/cowrie/var/lib/cowrie/tty/` inside it.
 
 ```
-python3 features-tty.py --dir <tty dir> --verify      # do this FIRST
-python3 features-tty.py --dir <tty dir> --out tty-features.csv
+python3 features-tty.py --dir <tty dir> --verify              # one recording, every chunk
+python3 features-tty.py --dir <tty dir> --census              # the dataset's shape
+python3 features-tty.py --dir <tty dir> --out tty-timeline.csv
 ```
 
-Cowrie's TTY log format is undocumented and is not guaranteed for this build
-(`3.0.16.dev4+g9dc1ea8f3`). The parser therefore validates every record and
-**fails loudly** rather than half-reading a file. `--verify` prints one
-recording's parse and says to cross-check it against Cowrie's own player:
+**It is not a keystroke-timing tool, and until 5 October 2026 it was written as
+one.** That was wrong, and the measurement is a finding worth keeping. Across all
+130 recordings:
+
+| | |
+| --- | --- |
+| Input records from visitors | 593 (67,669 bytes) |
+| Mean bytes per input record | 114.1 |
+| Records of exactly one character | 5 — `e`, `x`, `i`, `t`, `w` |
+| Records containing a backspace | 1 |
+| Recordings that are a single pasted command | 62 of 130 |
+| Inter-command gaps available | 464 |
+
+A keystroke is one byte. Cowrie writes one record per chunk arriving on the wire,
+so a 114-byte record is a whole command line pasted or piped in. The only
+characters ever typed one at a time in this dataset spell `exit`. So the
+intervals this script reports are gaps between **commands**, and the columns are
+named `icg` for that reason. ML spin-off option 3 was withdrawn on this evidence.
+
+The `scripted` / `typed` / `unlabelled` weak label was **removed**. It keyed off a
+backspace count and a 5 ms threshold, and would have labelled command pacing
+while calling it typing rhythm.
+
+Cowrie's TTY log format is undocumented. The header layout the parser uses was
+derived from a hex dump of a real recording, not from the source, after an
+assumed layout failed — it is documented at the top of the script. Two fields
+were wrong: the order (`length, direction, sec, usec`, not `direction, sec, usec,
+length`) and the op constants (open 1, **close 2, write 3**).
+
+It is checked rather than trusted. Every record is validated, a file that does
+not parse is reported by name, and a parse failure exits non-zero so a scheduled
+run cannot read it as success. All 130 recordings walk to their exact end with
+zero trailing bytes and yield exactly one open and one close record — a wrong
+layout desynchronises within a handful of records. `--verify` prints every chunk
+one visitor sent, in order, with the gap before each, for cross-checking against
+Cowrie's own player:
 
 ```
 /home/cowrie/cowrie/bin/playlog -f <that same file>
 ```
 
-If the byte counts and the time span do not line up, the parser is wrong for this
-build and the features mean nothing. That is a normal thing to discover. A parser
-that quietly produced plausible-looking numbers would be the bad outcome.
+The tty directory also holds a `.gitignore`. The script skips it **by name and
+says so** — earlier passes used `glob`, which silently omits dotfiles, and a
+total computed over a quietly filtered set looks exactly like a total.
 
-The weak labels it assigns — `scripted`, `typed`, `unlabelled` — are a guess from
-thresholds, and the thresholds are printed in the script's docstring. The
-`unlabelled` rows are the finding, not a residue to be tidied away.
-
+Rows with no interval at all are kept, not dropped. 62 of 130 recordings are one
+pasted command, and that proportion is itself the result.
 ---
 
 ## Not in this repository
