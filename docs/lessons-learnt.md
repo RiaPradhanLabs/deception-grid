@@ -498,3 +498,286 @@ recordings, and 3 OT records, all three from the loopback probe described above.
 Event arrival rate over that morning varied from roughly 29 to 79 per minute,
 nearly threefold within four hours, which is worth stating rather than averaging.
 `ingest.py` remains the figure to quote.*
+
+---
+
+# Addendum — 5 October 2026, afternoon
+
+The morning addendum above was written at 05:40 UTC. This one covers the rest of
+the day: the TTY parser, the artefact rule, and one planned analysis abandoned on
+measurement. Appended rather than woven in, for the same reason as before — the
+as-at dates above stay meaningful.
+
+## Addition to the one rule
+
+The rule at the top of this document is *before quoting a count, look at five of
+the rows it counts*. It guards against trusting a summary. This morning's
+addendum added its mirror image: *when a thing moves, go and look at everything
+that names it*.
+
+Today adds a third, and it is the subtlest of them:
+
+> **A tool can quietly narrow its own input, and a total computed over a
+> silently filtered set looks exactly like a total.**
+
+Three census scripts were written against the TTY recordings using
+`glob.glob(dir + '/*')`. Python's `glob` does not match files beginning with a
+dot, and Cowrie keeps a `.gitignore` in that directory. Every one of those runs
+silently excluded a file and reported a clean, confident total. The rewritten
+tool uses `listdir`, found the file, and now prints what it skips **by name**:
+
+```
+not recordings, skipped: .gitignore
+```
+
+The count of real recordings was never affected. That is exactly why it matters:
+nothing in the output was wrong, and nothing would ever have said so. The first
+rule asks whether a number is true. This one asks whether the number was
+computed over the set you think it was.
+
+## On measurement
+
+**A measurement can retire a planned analysis, and that is a result rather than
+a gap.** The TTY recordings were collected partly to support keystroke-timing
+analysis — separating a human at a prompt from a pasted script by the rhythm of
+the characters. Measured across all 130 recordings:
+
+| | |
+|---|---|
+| Input records from visitors | 593, totalling 67,669 bytes |
+| Mean bytes per input record | 114.1 |
+| Records ending in CR or LF | 373 |
+| Records carrying exactly one character | 5 — `e`, `x`, `i`, `t`, `w` |
+| Records containing a backspace | 1 |
+| Recordings that are a single pasted command | 62 of 130 |
+
+A keystroke is one byte. Cowrie writes one record per chunk arriving on the
+wire, so a 114-byte record is a whole command line pasted or piped in. The only
+characters ever delivered one at a time in this dataset spell `exit`, plus a
+single `w`. One machine on the open internet for ten days is reached almost
+entirely by automation, and automation does not type.
+
+So the analysis was withdrawn. Writing that down is worth more than quietly
+dropping it: a published technique could not be applied here, the reason is a
+property of the traffic rather than of the tooling, and no amount of further
+collection changes it. The replacement is smaller and honest — intervals between
+*commands*, 464 of them across the 20 recordings with ten or more commands,
+reported as descriptive statistics and named `icg` so they can never later be
+quoted as keystroke intervals.
+
+**Predict the change before you make it.** Before the artefact rule was
+deployed, a read-only script ran the old and new rules side by side over the
+stored rows and predicted that 22 attempts would be reclassified. The
+re-derivation moved 22. A re-derive whose output you cannot state in advance is
+not a verification of anything; it is a hope that the number looks reasonable
+afterwards.
+
+## On tools
+
+**An undocumented binary format should be read, not recalled.** The TTY parser
+assumed a header layout from recollection of Cowrie's source and was wrong in
+two independent ways within 24 bytes — the field order, and the op constants.
+The fix came from dumping the first 64 bytes of a real recording and finding
+where the Unix timestamp actually landed:
+
+```
+offset  0  op         1 = open, 2 = close, 3 = write
+offset  4  unused     always 0 in every record observed
+offset  8  length     payload bytes following the header
+offset 12  direction  1 = input, 2 = output, 3 = interact
+offset 16  sec        Unix seconds
+offset 20  usec       microseconds
+```
+
+The proof the layout is right is structural rather than plausible: all 130
+recordings walk to their exact end with zero trailing bytes, and each yields
+exactly one open record and one close record. A wrong field order desynchronises
+within a handful of records, so reaching the final byte 130 times is evidence.
+
+**A tool that cannot fail loudly will fail quietly.** The broken parser was
+caught only because its `--verify` mode refused to produce output it could not
+justify, printing `length=1790661295 is not plausible` instead of a plausible
+number. Two further guards were added on the same reasoning: a parse failure now
+exits non-zero so a scheduled run cannot read it as success, and recordings with
+no measurable interval are kept as rows rather than dropped — 62 of 130 are a
+single pasted command, and that proportion is itself the finding.
+
+**A rule can be correct and still not be in force.** Version six of the artefact
+rule was written, documented and passing its own self-test — on the laptop. The
+sensor was still running version five, and the database still held version-five
+verdicts, because every column except `raw` is derived and `INSERT OR IGNORE`
+never revisits a row it already holds. Three places had to agree before the
+change existed anywhere that mattered: the repository, the sensor, and the
+re-derived rows.
+
+The self-test is what prevented the same rule being written twice. Running
+`ingest.py --selftest` as the first step, rather than reading the code and
+assuming, showed all 16 cases already passing.
+
+## On controls
+
+**A diagnostic that prints nothing is ambiguous, and the ambiguity has to be
+resolved before it is relied on.** `ingest.py` prints a `window checks N inside,
+N outside, N undated` line so that a date-scoped exclusion doing nothing cannot
+go unnoticed. After today's run the line was absent entirely. That has two
+possible meanings — the windows were bypassed, or they were never reached — and
+only one is benign.
+
+It was the benign one, confirmed by query: zero rows in the database carry the
+laptop's address, because admin SSH is on port 62222 where real `sshd` handles
+it and Cowrie never sees it, and the Modbus probe ran from the machine itself.
+The counters are truthfully zero. But the mechanism is therefore **unexercised
+in production**, and the first event that will ever carry a windowed address is
+step 5 of the OT-door runbook, which connects to port 502 from the laptop.
+
+The lesson is that *absent* and *zero* are different outputs and should look
+different. A counter that prints nothing when it has counted nothing cannot be
+distinguished from a counter that was never called.
+
+**A self-identifying test credential makes your own traffic self-documenting.**
+The 15 rows excluded as the analyst's belong to two addresses that are in
+`exclude-ips.txt` without dates, so they are excluded for all time — the
+over-exclusion risk this project built windows to avoid. Checking whether that
+was right took one query, and the answer was certain rather than probable only
+because one row reads:
+
+```
+cowrie.login.failed   'root' / 'no-honey-in-this-pot'
+```
+
+Nobody else sends that. A dated line in `analyst-addresses.log` records which
+address was ours; a credential like that records it *inside the data*, where it
+survives every later question about whether the exclusion list was correct. Do
+it deliberately from now on, including on the OT side — a register write with a
+recognisable value does the same job on Modbus.
+
+## A reported success, one more time, in the tooling itself
+
+The one rule found a new place to apply on the same afternoon, and this time in
+the mechanism used to move files onto the laptop rather than in the project's own
+code.
+
+Two files were written to the laptop's checkout. The write reported
+`"written"`, with nothing rejected, and the files' modification times on disk
+changed to match. Both checks said the delivery had worked. Then:
+
+```
+features-files.py   19,140 bytes written   11,227 bytes on disk
+analysis/README.md   9,899 bytes written    6,111 bytes on disk
+```
+
+The content that arrived was a stale copy of each file from earlier in the day.
+It was not noticed from the report, which was clean, nor from the timestamps,
+which moved. It was noticed because the next step copied one of the files to the
+sensor and the transfer printed `11KB` where `19KB` was expected — and then
+confirmed because the hash the sensor computed matched the stale copy exactly.
+
+Two files delivered the same way minutes earlier arrived intact, so the failure
+is intermittent and no explanation for it is offered here. What follows from it
+does not depend on knowing the cause:
+
+> **A tool reporting that it wrote a file is not evidence that your bytes are in
+> it. Check the size or the hash of what arrived, not the status of the thing
+> that sent it.**
+
+This is the same shape as the backup that reported success over an empty
+directory, the tar that exited cleanly while its cleanup never ran, and the
+version number three sources agreed on without any of them knowing. The rule was
+already written down. It had simply not been applied to the act of copying a
+file, because copying a file feels too simple to need checking.
+
+One consequence worth recording rather than quietly fixing: `analysis/README.md`
+was committed and pushed in `e4d8a43` **in its stale form**, so for a short
+period the repository's own documentation still described `features-tty.py` as a
+keystroke-timing tool while the script beside it said the opposite. Corrected in
+a later commit, and the sequence is left visible here.
+
+---
+
+## The redirect that destroyed the file it was meant to replace
+
+Every file pushed to the sensor today was converted with the same line:
+
+```
+sed 's/\r$//' features-files.py.crlf > features-files.py && rm features-files.py.crlf
+```
+
+On one attempt the upload had not completed, so the `.crlf` file did not exist.
+The shell creates and **truncates the destination before the command on the left
+runs**, so the redirect emptied the good copy of `features-files.py`, `sed` then
+failed, and `&& rm` never ran. The file was left at zero bytes.
+
+What made it dangerous rather than merely annoying: **an empty Python file runs
+silently and exits zero.** Both commands that followed —
+
+```
+sudo python3 features-files.py --verify
+sudo python3 features-files.py --out ~/analysis/file-features.csv
+```
+
+— produced no output whatsoever and returned success. Nothing printed, nothing
+failed, nothing written. It looked exactly like a clean finish, and on a day
+spent adding loud failure modes to that very script, the script could not speak
+because there was none of it left. The only thing that gave it away was the hash:
+
+```
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+```
+
+which is the SHA-256 of empty input and worth recognising on sight.
+
+**The standing pattern from now on**, which cannot destroy anything, because it
+converts in place and renames only on success:
+
+```
+sed -i 's/\r$//' <file>.crlf && mv -f <file>.crlf <file>
+sha256sum <file>
+```
+
+If the upload did not arrive, `sed` fails, `mv` never runs, and the previous good
+copy is untouched. The hash is checked before the file is run, not after.
+
+Two lessons, and the second is the general one:
+
+- A redirect is not a safe way to transform a file into itself or over a working
+  copy. `sed -i` plus `mv` is, and costs nothing.
+- **Silence from a tool is not the same as success, and an empty program is the
+  quietest possible failure.** Every loud-failure guard added today lives inside
+  the file; none of them survives the file being gone. A check that depends on
+  the thing being checked is not a check — which is why the hash, computed
+  outside the program, is the one that worked.
+
+---
+
+## Corrections owed to this document
+
+**The morning addendum's analyst-exclusion paragraph is superseded.** It ends
+*"The address `allow-me.ps1` reports must be appended to `exclude-ips.txt`
+before step 5, and `ingest.py` re-run. Still outstanding at the time of
+writing."* That is no longer the plan and should not be followed: appending by
+hand creates a permanent exclusion. `allow-me.ps1` now records each address with
+a UTC timestamp, `backup.ps1` copies the history to the sensor, and `ingest.py`
+excludes an address only for the window it was held. The hand-append is the
+fallback, not the procedure.
+
+**The morning addendum's figure of 132 TTY recordings is wrong. It is 130.**
+The two measurements disagreed, and recordings do not disappear, so rather than
+pick one the directory was counted directly:
+
+```
+sudo ls -1 /home/cowrie/cowrie/var/lib/cowrie/tty | wc -l
+130
+```
+
+130 files, plus the `.gitignore` the count excludes. The 132 is left above rather
+than edited out, because a figure that moved in the impossible direction is a
+finding about the measurement and not just a typo.
+
+---
+
+*Afternoon figures are as at 5 October 2026, 13:17 UTC, from `ingest.py`:
+465,004 lines read across 11 Cowrie log files and 2 Conpot files, 454,734 events
+that count, 2,262 distinct sources, 80,845 real password attempts, 3,370
+successful logins from 562 sources, 130 TTY recordings, and no OT events that
+count — the door opens on 6 October. 10,171 attempts remain excluded as
+artefacts after 22 were recovered.*
