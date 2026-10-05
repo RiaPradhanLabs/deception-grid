@@ -155,16 +155,38 @@ SELECT username, password, COUNT(*) AS rows_
 .print
 .print === 13. Files: fetched by us, or supplied by them? ===
 -- This distinction produced five wrong figures on 29 September 2026 and is the
--- reason this query exists. Cowrie logs three different things under the single
--- eventid cowrie.session.file_download. Only a `url` means an outbound fetch:
+-- reason this query exists. Cowrie logs FOUR different things under eventids
+-- beginning cowrie.session.file_, and a `url` alone does not separate them:
 --
---   url present            we went and got it. OUTBOUND. Must be zero for any
---                          timestamp after the block went in on 29 Sept 12:00.
+--   file_download, url, and a shasum or outfile
+--                          we went and got it, and we GOT it. OUTBOUND, and
+--                          this is the one that must be zero for any timestamp
+--                          after the block went in on 29 Sept 12:00.
+--   file_download.failed, url
+--                          we tried and were STOPPED. Outbound in intent,
+--                          inbound in effect: nothing arrived. Expected to be
+--                          large and growing -- it is the block working, and it
+--                          is evidence the control is alive rather than a
+--                          breach. 505 of these by 5 October, 34 destinations.
 --   file_upload, no url    the attacker pushed it over scp. Inbound.
 --   file_download, no url  a shell redirection we captured. Inbound, and not
 --                          delivery at all -- it is the writable-directory
 --                          probe, which is why it yields few distinct files
 --                          from many events.
+--
+-- CORRECTED 5 October 2026, and the correction is the point. The four lines
+-- above previously read "url present -- we went and got it. OUTBOUND. Must be
+-- zero", which is wrong, because a BLOCKED fetch is logged as
+-- file_download.failed and carries the url it tried. The SELECT below always
+-- had this right: it tests the eventid as well as the url, and reports "FETCHED
+-- - outbound" separately from "fetch failed - outbound".
+--
+-- analysis/figures.sh then implemented the COMMENT rather than the query four
+-- lines below it, and so reported 455 blocked attempts as *** THE BLOCK IS NOT
+-- HOLDING *** on every run since 29 September, with the instruction not to
+-- publish any figure until it was explained. A correct implementation with a
+-- wrong prose summary beside it is more dangerous than no summary, because the
+-- next thing built is built from the prose.
 --
 -- Never count these together, and never count files in the downloads directory
 -- as a proxy for any of them: redirection captures are named redir_<uuid>
