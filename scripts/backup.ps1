@@ -63,7 +63,7 @@ $paths = @(
 ssh -p $Port "$User@$DecoyHost" "sudo tar czf $remote -C / $paths && sudo chown ${User}:${User} $remote"
 
 if ($LASTEXITCODE -ge 2) {
-    throw "tar failed on the sensor (exit $LASTEXITCODE). Nothing downloaded."
+    throw "Remote archive step failed (exit $LASTEXITCODE). Nothing downloaded. Exit 255 usually means ssh could not connect; 2 or above means tar failed."
 }
 
 scp -P $Port "${User}@${DecoyHost}:$remote" $Dest
