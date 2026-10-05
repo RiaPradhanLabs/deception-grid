@@ -62,4 +62,4 @@ if ($new -ne "$ip/32") {
 }
 
 Write-Host "Done. Rule now allows $new"
-Write-Host "Now: ssh -p 62222 aster@<your machine>"
+Write-Host "Now: ssh -p 62222 aster@$env:DECOY_HOST"
