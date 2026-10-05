@@ -42,41 +42,6 @@ Conpot's records need normalising on the way in: `event_type` is **null** on
 protocol records, and `request` is a Python bytes *repr* stored as a JSON string.
 Both are handled, and both were found by reading values rather than keys.
 
-### Which addresses count as ours
-
-Two files, and they are not interchangeable.
-
-`exclude-ips.txt` is the hand-maintained list of bare addresses. It carries no
-dates, so every address in it is excluded **for all time**. Mode 600, never
-committed; `exclude-ips.txt.example` documents the format.
-
-`analyst-addresses.log` is written by `allow-me.ps1` on every run, one line of
-`<UTC> <address>`, since 5 October 2026. From it, `ingest.py` gives each address
-a **window**: ours from its first observation until the first observation of a
-different address, with the latest address running open-ended.
-
-The reason is over-exclusion. A residential address rotates, and one excluded
-permanently may belong to a real scanner next month — whose traffic would then
-be discarded as ours, with nothing in the output to show it had been.
-
-Two things the run output tells you, and both matter:
-
-- **window checks: N inside, N outside, N undated.** If every check is undated,
-  the event timestamp is not being read and the windows are doing nothing. The
-  first version of this code had exactly that bug — it read `event.get('ts')`,
-  but `ts` is only the database column and the event dict carries `timestamp`.
-- **MALFORMED n line(s).** An unparsed history is indistinguishable from no
-  rotations, so bad lines are counted rather than skipped.
-
-The honest limitation, printed on every run: the history only begins on
-5 October 2026. The addresses already in `exclude-ips.txt` stay unbounded,
-because nothing recorded when they were held and inventing windows would be
-worse than saying so.
-
-Adding a new address to `exclude-ips.txt` still works and is still safe. It is
-simply blunter than letting the log do it, and if an address is in both files
-the unbounded entry wins — the run output warns when that happens.
-
 ## weekly.sql
 
 Read the comments in it. Each one records a mistake that query exists to prevent.
