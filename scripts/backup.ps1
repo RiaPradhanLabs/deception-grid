@@ -29,6 +29,35 @@ New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 # so make sure we can get in before trying to.
 & "$PSScriptRoot\allow-me.ps1"
 
+# --- the address history, to the machine that actually reads it -----------
+#
+# allow-me.ps1 has just appended today's line to this file. It lives HERE, on
+# the laptop. ingest.py reads it on the SENSOR, to decide that one of our own
+# addresses was ours only for the window we really held it, rather than for
+# all time.
+#
+# Those are two different machines, and when the date-scoped exclusion was
+# written on 5 October 2026 nobody joined them up: ingest.py looked for a file
+# that was never going to be there, found nothing, and scoped nothing. It said
+# so in its own output, which is the only reason it was caught within the hour.
+#
+# Copying it up on every run keeps the sensor's copy at most one check-in out
+# of date, which is as fresh as it needs to be -- the address cannot change
+# without allow-me.ps1 noticing on the next run anyway.
+$history = Join-Path $HOME 'deception-grid\analyst-addresses.log'
+if (Test-Path $history) {
+    scp -P $Port $history "${User}@${DecoyHost}:/home/$User/analysis/analyst-addresses.log"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  WARNING  address history not copied (exit $LASTEXITCODE)."
+        Write-Host "           ingest.py will fall back to excluding every own address"
+        Write-Host "           for all time -- safe, but blunt, and it will say so."
+    }
+} else {
+    Write-Host "  WARNING  $history does not exist. allow-me.ps1 is supposed to"
+    Write-Host "           write it on every run; without it the date-scoped"
+    Write-Host "           exclusion has no data to work from."
+}
+
 Write-Host ''
 Write-Host '--- status ------------------------------------------------'
 ssh -p $Port "$User@$DecoyHost" 'sudo decoy-status'
