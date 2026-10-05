@@ -35,6 +35,8 @@ HERE     = os.path.dirname(os.path.abspath(__file__))
 DB       = os.environ.get('DECOY_DB', os.path.join(HERE, 'decoy.sqlite'))
 SCHEMA   = os.path.join(HERE, 'schema.sql')
 EXCLUDES = os.path.join(HERE, 'exclude-ips.txt')
+HISTORY  = os.environ.get('DECOY_ADDR_HISTORY',
+                          os.path.join(HERE, 'analyst-addresses.log'))
 LOGS     = os.environ.get('DECOY_LOGS',
                           '/home/cowrie/cowrie/var/log/cowrie/cowrie.json*')
 OT_LOGS  = os.environ.get('DECOY_OT_LOGS',
@@ -173,14 +175,136 @@ def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')
 
 
+class OwnAddresses(object):
+    """Our own addresses, and -- where it is known -- WHEN each was ours.
+
+    Two sources, deliberately kept apart because they answer different
+    questions and have different strength.
+
+      exclude-ips.txt        a hand-maintained list of bare addresses, with no
+                             dates. Every address here is excluded at ALL times.
+                             This is the pre-5-October behaviour and it is kept
+                             exactly as it was.
+
+      analyst-addresses.log  one line per run of allow-me.ps1, written since
+                             commit 9cdd86f on 5 October 2026:
+
+                                 2026-10-05T06:28:05Z 203.0.113.9
+
+                             From a series of those, an address is ours from the
+                             first time it was observed until the first time a
+                             DIFFERENT address was observed. The last address in
+                             the file is ours from its first observation onward,
+                             with no end.
+
+    WHY THIS EXISTS. A residential address rotates. Excluding one permanently is
+    over-exclusion, because the address we held last Tuesday may belong to a
+    genuine scanner next month, and that scanner's traffic would then be thrown
+    away as ours with nothing in the output to show it. Address-plus-window is
+    the defensible form.
+
+    WHAT IT CANNOT DO, and this is the honest limitation. The history only
+    begins on 5 October 2026, because nothing recorded the addresses before
+    then. The four addresses already in exclude-ips.txt therefore stay unbounded
+    -- not because that is right, but because the evidence to scope them does
+    not exist and inventing windows for them would be worse. `describe()` says
+    so on every run rather than leaving it to be discovered.
+
+    THE DIRECTION OF THE ERROR, chosen on purpose. Between the last sighting of
+    one address and the first sighting of the next, the rotation could have
+    happened at any moment. A window is therefore extended to the next
+    observation, which over-excludes slightly rather than risking our own
+    traffic being counted as an attacker's. Losing a little real data is a
+    stated limitation; counting yourself as a visitor corrupts the finding.
+    """
+
+    def __init__(self, unbounded, windows):
+        self.unbounded = unbounded          # set of addresses, always excluded
+        self.windows = windows              # {addr: [(start_iso, end_iso|None)]}
+        self.undated = 0                    # windowed hits with no usable time
+        self.in_window = 0                  # windowed hits inside a window
+        self.out_of_window = 0              # windowed hits outside every window
+
+    def __len__(self):
+        return len(self.unbounded | set(self.windows))
+
+    def __contains__(self, ip):
+        """Was this ever one of ours? Used for reporting, never for exclusion."""
+        return ip in self.unbounded or ip in self.windows
+
+    def held_at(self, ip, ts):
+        """Was this address ours at this moment?
+
+        `ts` is the event's own ISO timestamp. A missing or unparseable ts falls
+        back to 'ever ours', because an undated event we cannot place is more
+        safely excluded than counted.
+        """
+        if ip in self.unbounded:
+            return True
+        spans = self.windows.get(ip)
+        if not spans:
+            return False
+        if not ts:
+            # Counted, not swallowed: see the tallies printed at the end of a
+            # run. A rising number here means the timestamp field is not being
+            # found, which would make every window meaningless.
+            self.undated += 1
+            return True
+        key = str(ts)[:19]
+        for start, end in spans:
+            if key >= start and (end is None or key < end):
+                self.in_window += 1
+                return True
+        self.out_of_window += 1
+        return False
+
+    def describe(self):
+        lines = ['  own addresses     %d total' % len(self)]
+        lines.append('    always excluded %d from %s (no dates recorded)'
+                     % (len(self.unbounded), os.path.basename(EXCLUDES)))
+        dated = len(self.windows)
+        if dated:
+            lines.append('    date-scoped     %d from %s'
+                         % (dated, os.path.basename(HISTORY)))
+            for ip, spans in sorted(self.windows.items()):
+                for start, end in spans:
+                    lines.append('      %s  %s -> %s'
+                                 % (ip, start, end or 'now'))
+        else:
+            lines.append('    date-scoped     0 -- %s is absent or empty, so '
+                         'every own address is excluded for all time'
+                         % os.path.basename(HISTORY))
+        if self.in_window or self.out_of_window or self.undated:
+            lines.append('    window checks   %d inside, %d outside, %d undated'
+                         % (self.in_window, self.out_of_window, self.undated))
+            if self.undated and not self.in_window:
+                lines.append('      WARNING every check was undated. The event '
+                             'timestamp is not being read, so the windows above '
+                             'are doing nothing. Check the field name.')
+        overlap = self.unbounded & set(self.windows)
+        if overlap:
+            lines.append('    NOTE %d address(es) appear in BOTH files and are '
+                         'therefore excluded for all time, which makes their '
+                         'window ineffective: %s'
+                         % (len(overlap), ', '.join(sorted(overlap))))
+            lines.append('         Remove them from %s to let the window apply.'
+                         % os.path.basename(EXCLUDES))
+        return lines
+
+
 def load_own_addresses(path):
-    """Our own addresses. One per line; '#' comments and blank lines ignored.
+    """The undated list. One per line; '#' comments and blank lines ignored.
 
     This file is never committed: it holds the analyst's home addresses.
     Top it up whenever the home connection rotates, with:
 
         echo "${SSH_CLIENT%% *}" >> exclude-ips.txt
         sort -u -o exclude-ips.txt exclude-ips.txt
+
+    Since 5 October 2026 a new address does not need to be added here at all --
+    allow-me.ps1 records it in analyst-addresses.log with the time, and that
+    gives a window rather than a permanent exclusion. Adding it here still works
+    and is still safe; it is simply blunter.
     """
     ips = set()
     if os.path.exists(path):
@@ -190,6 +314,45 @@ def load_own_addresses(path):
                 if line:
                     ips.add(line)
     return ips
+
+
+HISTORY_LINE = re.compile(
+    r'^\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})Z?\s+'
+    r'(\d{1,3}(?:\.\d{1,3}){3})\s*$')
+
+
+def load_address_history(path):
+    """Turn allow-me.ps1's run log into {address: [(start, end|None)]}.
+
+    The file is written from Windows, so it has CRLF line endings; .strip()
+    inside the pattern handles that. Anything that does not match the expected
+    shape is COUNTED AND REPORTED rather than skipped quietly -- a log format
+    that drifts must not silently produce an empty history, because an empty
+    history looks exactly like "no rotations yet".
+    """
+    observations, malformed = [], 0
+    if os.path.exists(path):
+        with open(path, errors='replace') as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                m = HISTORY_LINE.match(line)
+                if m:
+                    observations.append((m.group(1), m.group(2)))
+                else:
+                    malformed += 1
+
+    observations.sort()
+    windows = {}
+    run_addr, run_start = None, None
+    for ts, ip in observations:
+        if ip != run_addr:
+            if run_addr is not None:
+                windows.setdefault(run_addr, []).append((run_start, ts))
+            run_addr, run_start = ip, ts
+    if run_addr is not None:
+        windows.setdefault(run_addr, []).append((run_start, None))
+    return windows, malformed, len(observations)
 
 
 def exclusion_reason(event, own):
@@ -235,7 +398,16 @@ def exclusion_reason(event, own):
     src = event.get('src_ip')
     if src == '127.0.0.1':
         return 'loopback'
-    if src in own:
+    # Date-scoped since 5 October 2026. An address is ours only for the window
+    # we actually held it, where that is known; addresses in exclude-ips.txt
+    # carry no dates and stay excluded for all time. See OwnAddresses.
+    #
+    # NOTE the field name. The event dict carries 'timestamp'; 'ts' is only the
+    # DATABASE column name. Using event.get('ts') here returns None for every
+    # row, every window falls back to "ours for all time", and the date-scoping
+    # does nothing at all while still printing a windows table on every run.
+    # That was the first version of this line.
+    if own.held_at(src, event.get('timestamp')):
         return 'analyst'
     if event.get('eventid') in LOGIN_EVENTS:
         user, pw = event.get('username'), event.get('password')
@@ -510,7 +682,9 @@ def report(db):
 
 
 def main():
-    own = load_own_addresses(EXCLUDES)
+    unbounded = load_own_addresses(EXCLUDES)
+    windows, malformed, observations = load_address_history(HISTORY)
+    own = OwnAddresses(unbounded, windows)
 
     # Both decoys, into one facts table. The IT log must exist -- if it does
     # not, something is wrong and the run should stop. The OT log may legitimately
@@ -610,8 +784,15 @@ def main():
                                 ', '.join(os.path.basename(p) for p in paths)))
         else:
             print('  %s  NOTHING MATCHED %s' % (label, pattern))
-    print('  own addresses     %d loaded from %s'
-          % (len(own), os.path.basename(EXCLUDES)))
+    for line in own.describe():
+        print(line)
+    if observations:
+        print('    history         %d observation(s) read' % observations)
+    if malformed:
+        print('    MALFORMED       %d line(s) in %s did not match '
+              '"<ISO8601Z> <address>" and were not used. Fix them -- an '
+              'unparsed history is indistinguishable from no rotations.'
+              % (malformed, os.path.basename(HISTORY)))
     print('  lines read        %d' % read)
     print('  rows inserted     %d' % inserted)
     print('  already held      %d' % skipped)
