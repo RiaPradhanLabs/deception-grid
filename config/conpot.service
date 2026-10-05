@@ -16,7 +16,7 @@ RestartSec=5
 # The plan recorded earlier in this build was systemd socket activation, the
 # same mechanism Cowrie uses for 22 and 23. That was an ASSUMPTION and it is
 # withdrawn. Cowrie supports inherited sockets explicitly -- cowrie.cfg refers
-# to them by index -- and nothing establishes that Conpot 1.0.0 does. Building
+# to them by index -- and nothing establishes that Conpot 0.6.0 does. Building
 # on an unverified application feature is how several errors on this project
 # started.
 #
