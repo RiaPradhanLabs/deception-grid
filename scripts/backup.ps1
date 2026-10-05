@@ -62,6 +62,10 @@ $paths = @(
 
 ssh -p $Port "$User@$DecoyHost" "sudo tar czf $remote -C / $paths && sudo chown ${User}:${User} $remote"
 
+if ($LASTEXITCODE -ge 2) {
+    throw "tar failed on the sensor (exit $LASTEXITCODE). Nothing downloaded."
+}
+
 scp -P $Port "${User}@${DecoyHost}:$remote" $Dest
 
 ssh -p $Port "$User@$DecoyHost" "rm -f $remote"
