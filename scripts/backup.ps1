@@ -21,7 +21,7 @@ if (-not $DecoyHost) {
 # sensor, and the warning that means you reached the decoy".
 $Port  = 62222
 $User  = 'aster'
-$Stamp = Get-Date -Format 'yyyy-MM-dd-HHmm'
+$Stamp = [DateTime]::UtcNow.ToString('yyyy-MM-dd-HHmm') + 'Z'
 $Dest  = Join-Path $HOME 'deception-grid\backups'
 New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 
@@ -34,7 +34,7 @@ Write-Host '--- status ------------------------------------------------'
 ssh -p $Port "$User@$DecoyHost" 'sudo decoy-status'
 
 Write-Host '--- backup ------------------------------------------------'
-$remote = "/tmp/decoy-$Stamp.tar.gz"
+$remote = "/home/$User/staging/decoy-$Stamp.tar.gz"
 
 # Built on the server and then copied down, rather than streamed:
 # piping binary through PowerShell corrupts it.
