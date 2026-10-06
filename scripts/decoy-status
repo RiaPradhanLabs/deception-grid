@@ -23,8 +23,9 @@ CONPOT_UID=1002
 
 # Outbound connections were blocked on 29 September 2026 at about 12:00 UTC
 # for cowrie, and extended to conpot at about 15:30 the same day. The last file
-# Cowrie fetched over the network was at 08:51 that morning, so any url-bearing
-# download after this cutoff means the block has failed.
+# Cowrie fetched over the network was at 08:51 that morning, so a COMPLETED
+# fetch -- eventid exactly cowrie.session.file_download, carrying a url -- after
+# this cutoff means the block has failed.
 # See docs/rules-of-engagement.md, "The outbound download problem".
 BLOCK_CUTOFF=2026-09-29T12:00
 #
@@ -33,9 +34,16 @@ BLOCK_CUTOFF=2026-09-29T12:00
 # is not "downloads": it holds every file whose content Cowrie captured,
 # including files attackers push over SCP and the output of shell redirections,
 # and those keep arriving whether or not outbound is blocked. Counting them
-# measures attacker activity, not our firewall. The discriminator is the `url`
-# field: present means Cowrie went and got it, absent means the attacker
-# supplied the bytes.
+# measures attacker activity, not our firewall.
+#
+# Four things share the cowrie.session.file_ prefix and a url alone does not
+# separate them (corrected 6 October 2026 -- the earlier wording here, "url
+# present means Cowrie went and got it", was the same wrong summary that made
+# figures.sh cry wolf for six days; the CODE below was always right):
+#   file_download        + url   we went and got it. Must be zero after the cutoff.
+#   file_download.failed + url   we tried and were STOPPED. The block working.
+#   file_upload                  pushed over scp. Inbound.
+#   file_download, no url        a shell redirection we captured. Inbound.
 
 # The date the OT door opens. Before it, an empty OT log is CORRECT -- port 502
 # is closed in the Azure NSG and in ufw, and only our own loopback testing
@@ -144,33 +152,44 @@ fi
 # The silent failure this decoy is most prone to: answering Modbus perfectly and
 # writing nothing. conpot.cfg ships with [json] disabled and a path the conpot
 # user cannot write.
-if [ -f "$CONPOT_LOG" ]; then
-  lines=$(wc -l < "$CONPOT_LOG")
-  echo "    log        $lines records in $(basename "$CONPOT_LOG")"
+#
+# ALL conpot.json* files, not only the current one. logrotate rotates this log
+# daily with copytruncate, so after midnight conpot.json holds only the hours
+# since; a version of this section that read one file reported "0 records" and
+# "no external traffic" on any quiet morning regardless of what yesterday held
+# -- the one-file-of-five mistake from the IT side, repeated here. Found on
+# 6 October 2026, the morning the door opened, when the midnight rotation had
+# moved every record into conpot.json.1.
+ot_files=$(ls -1 "$CONPOT_LOG"* 2>/dev/null | wc -l)
+if [ "$ot_files" -gt 0 ]; then
+  lines=$(cat "$CONPOT_LOG"* 2>/dev/null | grep -c .)
+  echo "    log files  $ot_files"
+  echo "    log        $lines records across all files"
   python3 - "$CONPOT_LOG" "$OT_OPEN" "$TODAY" <<'PY'
-import datetime, json, sys
+import datetime, glob, json, sys
 
-path, ot_open, today = sys.argv[1], sys.argv[2], sys.argv[3]
+base, ot_open, today = sys.argv[1], sys.argv[2], sys.argv[3]
 newest, external, unreadable = None, set(), 0
-with open(path, errors='replace') as fh:
-    for line in fh:
-        if not line.strip():
-            continue
-        try:
-            e = json.loads(line)
-        except ValueError:
-            unreadable += 1
-            continue
-        ip = e.get('src_ip')
-        if ip and ip != '127.0.0.1':
-            external.add(ip)
-        t = e.get('event_time')
-        if t and (newest is None or t > newest):
-            newest = t
+for path in sorted(glob.glob(base + '*')):
+    with open(path, errors='replace') as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            try:
+                e = json.loads(line)
+            except ValueError:
+                unreadable += 1
+                continue
+            ip = e.get('src_ip')
+            if ip and ip != '127.0.0.1':
+                external.add(ip)
+            t = e.get('event_time')
+            if t and (newest is None or t > newest):
+                newest = t
 
 if newest:
     print("    last event %s" % newest[:19].replace('T', ' '))
-print("    sources    %d external, loopback excluded" % len(external))
+print("    sources    %d external, loopback excluded, all files" % len(external))
 if unreadable:
     print("    WARNING    %d OT log lines would not parse" % unreadable)
 
@@ -189,7 +208,7 @@ elif not external:
     print("               Check the NSG and ufw before concluding it is quiet.")
 PY
 else
-  echo "    log        *** $CONPOT_LOG MISSING ***"
+  echo "    log        *** $CONPOT_LOG MISSING (no conpot.json* at all) ***"
   echo "               conpot.cfg ships with [json] disabled and an unwritable"
   echo "               path. A decoy that answers and records nothing is the"
   echo "               worst outcome available. See docs/build.md."

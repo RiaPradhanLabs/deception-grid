@@ -62,7 +62,9 @@ Write-Host "This laptop is $ip"
 # address that never appeared is over-exclusion, and a residential address
 # reassigned to someone else would silently drop their genuine scans. What a
 # correct exclusion needs is an address AND the window we held it, which is
-# what this file accumulates. ingest.py does not read it yet.
+# what this file accumulates. backup.ps1 copies it to the sensor on every run
+# and ingest.py reads it there (both since 5 October 2026, later the same day
+# this line was first written saying it did not).
 $SeenLog = Join-Path $HOME 'deception-grid\analyst-addresses.log'
 Add-Content -Path $SeenLog -Value ('{0} {1}' -f [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'), $ip)
 
