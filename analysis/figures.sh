@@ -123,7 +123,8 @@ cat <<'MAP'
 
   docs/first-weekend.md
     - four-day totals: events, distinct sources, arrivals per door
-    - the three proxy sources and the 443/2535 lead (still unexamined)
+    - the three proxy sources; the 443/2535 lead was closed 29 September
+      (three sources are the whole set -- no fourth visitor)
     - CAVEAT TO KEEP: three sources, not one.
 
   docs/rules-of-engagement.md

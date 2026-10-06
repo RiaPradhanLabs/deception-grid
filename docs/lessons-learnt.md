@@ -99,8 +99,9 @@ the single change with the largest payoff.
 
 **Test against observed data, not imagined data — and do not filter against
 imagined patterns either.** These pull in opposite directions and both are right.
-The regression suite is nineteen cases, every one either a row seen on this
-sensor or a specific defect a previous version had; it caught a bug that had
+The regression suite is sixteen cases as of 5 October (nineteen when this was
+written; it now lives inside `ingest.py --selftest`), every one either a row
+seen on this sensor or a specific defect a previous version had; it caught a bug that had
 already been fixed once and was reintroduced by its own fix. But when a rule was
 written for a pattern nobody had observed, the reasoning to leave it alone was
 also correct — and then the pattern appeared in the real data within the hour.
@@ -219,8 +220,9 @@ retrofitted across seven documents.
 **8. Make every script print its inputs and its exclusions from version one.**
 It is four lines and it caught three mistakes.
 
-**9. Build the regression fixture early, from real observed rows.** The nineteen
-test cases exist because a rule went wrong five times. Two of those five would
+**9. Build the regression fixture early, from real observed rows.** The
+test cases (nineteen then, sixteen now, inside `ingest.py --selftest`) exist
+because a rule went wrong five times. Two of those five would
 have been caught on the first run.
 
 **10. Use a checksummed or encoded transfer for any file over about fifty lines,

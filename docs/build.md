@@ -261,9 +261,9 @@ Modbus/TCP. A standard MBAP-framed read returned a correctly formed exception
 the three configured strings length-prefixed, as a real controller would. This
 was the main risk and it is retired.
 
-**Five defects in the shipped template.** Four are fixed and verified as of
-29 September 2026; the fifth is the move to port 502, which is scheduled with
-the opening of the OT door on 6 October.
+**Five defects in the shipped template.** Four were fixed and verified on
+29 September 2026; the fifth, the move to port 502, was made in configuration
+the same day and became reachable when the OT door opened on 6 October.
 
 | Defect | Why it matters | Status |
 |---|---|---|
@@ -271,7 +271,7 @@ the opening of the OT door on 6 October.
 | Registers answer at `40001`, `30001`, coil `1`, and return *illegal data address* at `0` | `40001` is the **documentation** convention; on the wire, holding register 40001 is address `0`. A scanner reading from zero gets only errors — lost data, and a tell, since real controllers answer low addresses | Fixed — all four blocks at `0`, reads confirmed |
 | Every register reads zero, unchanged over four reads in thirty seconds | The four blocks are declared static: `value = "[0 for b in range(0,8)]"`, and `core/databus.py` evaluates a `value` expression once. A controller whose registers never move is not controlling anything | Fixed — own emulator module, movement confirmed on the wire |
 | Fetches its own public address from an external service on startup | An outbound connection from the VM, which this project's scope explicitly excludes. See the correction in `rules-of-engagement.md`. A far larger instance of the same problem was later found in Cowrie — see *Stopping the decoys reaching out* below | Fixed twice over: the setting is disabled, **and** that firewall rule now covers conpot's uid as well, which it did not at first |
-| Listens on 5020, not 502 | The whole OT argument depends on the real Modbus port. 502 is privileged, so it needs systemd socket activation | Open — scheduled for 6 October |
+| Listens on 5020, not 502 | The whole OT argument depends on the real Modbus port. 502 is privileged, so it needs a capability (not socket activation — see *Binding port 502*) | Fixed — bound 29 September, opened to the internet 6 October 2026 at 17:42:02 UTC |
 
 Also worth changing: Conpot created its temporary filesystem inside its own
 installed package directory. `--temp_dir` should point somewhere that is not
@@ -535,11 +535,41 @@ file is how a day of data goes missing.
 
 ### Opening the door, on 6 October
 
-Everything on the decoy side is done and verified. The remaining work is two
-firewall layers and it is written out as a runbook —
-`docs/opening-the-ot-door.md` — because it will be done a week after the work it
-completes, and the failure modes are specific: a colliding NSG priority, ufw open
-with the NSG still shut, or opening it and confirming nothing actually arrived.
+Everything on the decoy side was done and verified by 29 September. The
+remaining work was two firewall layers, written out as a runbook —
+`docs/opening-the-ot-door.md` — because it would be done a week after the work
+it completed, and the failure modes were specific: a colliding NSG priority, ufw
+open with the NSG still shut, or opening it and confirming nothing actually
+arrived.
+
+Done on 6 October 2026, following that runbook with the corrections recorded
+at its head:
+
+```
+pre-change timestamp     2026-10-06T17:39:38Z
+NSG rule                 allow-modbus-502, priority 330, in decoy-01-nsg
+                         (source and protocol copied from the port-22/23 rules)
+ufw                      502/tcp allowed at 2026-10-06T17:42:02Z   <- the opening instant
+first external arrival   none by 17:51 UTC, when the opening session closed; see the check-in log for the first
+```
+
+Both firewall layers were opened in the runbook's order — NSG first, with ufw
+still shut, so that a wrong NSG rule would be found with the second door closed.
+The analyst's own test connections — a bare TCP connect and one Modbus read
+under transaction id `A5A5`, five records in all — were recorded by Conpot and
+excluded by the date-scoped window: `window checks 5 inside, 0 outside,
+0 undated` printed for the first time, and `(5 excluded as analyst)` appeared
+under *the OT door*. `decoy-status`'s "door open, no traffic" warning was seen
+to fire before the first visitor and clear after — the first time that alarm
+had been observed in either state. Two predictions made before the run were
+wrong and are kept: the window counter was expected to read 10 (every row is
+checked at insert and again at re-derive), but the counter is printed before
+the re-derive runs, so it reads the insert pass only; and the history count was
+predicted from a stale morning figure. Neither changed a stop condition.
+
+The two doors therefore have different denominators — the IT door from
+25 September, the OT door from 6 October — and every table that puts them side
+by side carries both dates.
 
 ## Patching, and why the usual advice needed checking
 
@@ -1224,8 +1254,13 @@ own exclusions without being asked.
 
 ### Regression suite
 
-Nineteen cases, run against every edit, and every one of them is a row observed
-on this sensor or a specific defect a previous version had:
+Sixteen cases, embedded in `ingest.py` as `--selftest` since 5 October 2026 —
+fourteen credential rows plus the loopback and stranger checks — run against
+every edit, and every one of them is a row observed on this sensor or a specific
+defect a previous version had. (The 29 September suite had nineteen; it lived
+outside the script and was replaced. Which three were not carried across has
+not been reconstructed, and is not claimed here. This paragraph said "nineteen"
+until 6 October, a day after the count changed.)
 
 - the two rows that drove version five, `daemon\x00` and `\x1b\x11ECFF`
 - the four real credentials version two wrongly excluded
@@ -1298,70 +1333,88 @@ comment in the output saying which one to quote. A script that makes the right
 number easier to reach than the wrong one is worth more than a comment in a
 document saying which is which.
 
-### A parser that fails loudly
+### A parser that fails loudly — and the day it did
 
-Cowrie's TTY log is its own binary format: a 24-byte header per record, six
-little-endian int32 fields, then the payload. That layout comes from
-`cowrie/core/ttylog.py` and has been stable for years, but it is not a documented
-interface and nothing guarantees it for this build, `3.0.16.dev4+g9dc1ea8f3`.
+*This section was rewritten on 6 October 2026. The version written on 4 October
+described a keystroke-timing tool with `typed`/`scripted`/`unlabelled` labels
+and a 24-byte-header parser taken from recollection of Cowrie's source. On
+5 October the parser turned out to be wrong in two independent ways, and the
+measurement it then produced retired the keystroke-timing analysis altogether.
+Both are recorded in `docs/lessons-learnt.md` under the 5 October afternoon
+addendum; what follows describes the scripts as they are.*
 
-The temptation is to write the obvious parser and trust it, because it will
-produce numbers either way. That is the failure mode this whole project keeps
-running into: output that looks correct is not evidence of correctness.
+Cowrie's TTY log is its own undocumented binary format: a 24-byte header per
+record, six little-endian int32 fields, then the payload. The 4 October parser
+assumed the field order `direction, sec, usec, length` and the op constants
+`write = 2, close = 3`. The file has `length, direction, sec, usec`, and
+`close = 2, write = 3`. That is two independent errors inside 24 bytes, and the
+only reason they were caught is that `--verify` refused to print a number it
+could not justify — `length=1790661295 is not plausible` — rather than a
+plausible-looking one. 1790661295 is a Unix timestamp of 28 September, sitting
+in the field the code read as a length.
 
-So `features-tty.py` validates every record — op code in range, direction in
-range, microseconds under a million, length plausible, no trailing bytes after the
-last record — and raises on anything that fails. A file that does not parse
-cleanly is **reported by name**, not skipped silently, and the summary ends with a
-warning if any file failed.
+The layout now in the script was derived from a 64-byte hex dump of a real
+recording, not from source or memory. The proof that it is right is structural:
+all 130 recordings walk to their exact last byte with zero trailing bytes, and
+each yields exactly one open and one close record. A wrong field order
+desynchronises within a handful of records; reaching EOF on the byte 130 times
+is evidence rather than luck.
 
-It also has a `--verify` mode that parses one recording, prints the input byte
-count, the time span and the first 120 bytes of input as text, and then tells the
-reader to compare that against Cowrie's own player:
+`features-tty.py` still validates every record, reports a file that does not
+parse **by name**, and exits non-zero on any failure so a scheduled run cannot
+read it as success. `--verify` prints every chunk one visitor sent, with the
+gap before each, for cross-checking against Cowrie's own player:
 
 ```
 /home/cowrie/cowrie/bin/playlog -f <that same file>
 ```
 
-If they disagree, the parser is wrong for this build and the features mean
-nothing. Discovering that is a normal outcome. Not discovering it, and publishing
-keystroke statistics derived from a misread format, is the outcome worth this much
-care to avoid.
+### The labels were removed, because nobody typed
 
-`--verify` defaults to the **largest** recording rather than the first
-alphabetically, because the first file in a directory is as likely as not to be a
-two-record stub that proves nothing.
+The 4 October version assigned each recording `scripted`, `typed` or
+`unlabelled` from a backspace count and a 5 ms interval threshold. The
+`--census` mode added on 5 October measured, across all 130 recordings: 593
+input records averaging 114 bytes each, five records of exactly one character
+(spelling `exit`, plus a `w`), and one backspace in the whole dataset. A
+keystroke is one byte; a 114-byte record is a whole command line pasted or
+piped in. There is no per-character timing in this data to classify.
 
-### The weak labels are labelled as weak
+So the labels are gone, the analysis is withdrawn as a result rather than
+deferred, and the intervals the script reports are gaps between **commands** —
+named `icg` so they can never later be quoted as keystroke intervals. Rows with
+no interval are kept, not dropped: 62 of 130 recordings are a single pasted
+command, and that proportion is itself the finding.
 
-`features-tty.py` assigns each recording `scripted`, `typed` or `unlabelled` from
-thresholds: more than 95% of inter-keystroke intervals under 5 ms is a paste; a
-backspace present with a median interval over 80 ms is a person correcting
-themselves; everything else is unlabelled.
+The tty directory also holds a `.gitignore`. Three earlier census passes used
+`glob`, which omits dotfiles without saying so; the script now uses `listdir`
+and prints what it skips by name.
 
-Those thresholds are a guess. They are written in the script's docstring so the
-guess is visible, and the summary prints the count in each class. The `unlabelled`
-rows are the interesting ones — a tool inserting a fixed delay to look human and a
-person using tab-completion both land there — and the script says so in its own
-output, because a residue that gets tidied away is a finding that gets lost.
+### `features-files.py` is cross-checked, not trusted
 
-### Testing
+The 4 October version was tested against synthetic files and committed. On
+5 October a `--verify` mode was added that checks the script's own ELF reading
+against `file(1)`'s independent reading of the same bytes, and it found five
+defects on the real captures before the CSV was ever produced: a 24-byte gate
+that mislabelled truncated downloads as not-ELF (an infection that failed to
+complete is one of the more interesting things in the collection); a `sha256`
+column that was the hash of a *prefix* for any file over `--max-bytes`; dotfiles
+counted as samples; an `elf_stripped` flag that measured "no section headers",
+which is not stripping, and which the first `--verify` passed silently because
+it compared class and machine only; and m68k — a standard Mirai target — absent
+from the machine table, so three real samples came out as the bare number `4`.
 
-Both scripts were tested before being committed. `features-files.py` against real
-ELF binaries of known architecture, a shell script, a random-bytes file and a
-redirection artefact: entropy 8.00 on random data, correct architecture and
-section counts from the ELF headers, correct classification of the `redir_` name.
-`features-tty.py` against four synthetic recordings built to the assumed format —
-a slow session with a backspace, a single pasted chunk, a machine using a fixed
-150 ms delay, and 500 bytes of random data. The first three were labelled `typed`,
-`scripted` and `unlabelled` respectively, the fixed-delay one showing a uniformity
-of 0.00 as intended, and the random file failed to parse with a message naming the
-offset.
+Verified against all 136 captures as at 5 October 13:30 UTC: class and machine
+agreed with `file(1)` on 50 of 50 ELF files; `stripped` agreed on 45 with
+`file(1)` silent on 5; disagreements 0. `--verify` now counts
+agreement, disagreement and silence **per field**, and exits non-zero when a
+field was never cross-checked at all or an EM value has no name. `sha256` is
+streamed over the whole file regardless of `--max-bytes`, and a new
+`features_bytes` column says how many bytes each row's features cover.
 
-Both refuse to run against an empty directory and exit non-zero, rather than
-writing an empty CSV and reporting success. An empty result is indistinguishable
-from a successful one otherwise, which is the same failure as the `grep -q` guard
-that failed open on 29 September.
+Both scripts still refuse to run against an empty directory and exit non-zero,
+rather than writing an empty CSV and reporting success. An empty result is
+indistinguishable from a successful one otherwise, which is the same failure as
+the `grep -q` guard that failed open on 29 September.
 
 ## Teardown
 

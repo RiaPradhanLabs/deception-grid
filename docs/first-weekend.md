@@ -286,7 +286,10 @@ b'GET /json/ HTTP/1.1\r\nHost: ip-who.com\r\n\r\n'
 
 Cowrie also recorded a **JA4H fingerprint** for each forwarded HTTP request and a
 **JA4** fingerprint for the TLS one — client-identification artefacts that
-survive a change of address, and the most useful
+survive a change of address, and the most useful thing this section leaves
+open: whether the three sources share a fingerprint is one query nobody has
+run (it is open question 2 in `docs/lessons-learnt.md`). *This sentence ended
+mid-phrase from 29 September until 6 October 2026; completed, not rewritten.*
 
 ## What they actually installed, and what finding out cost us
 
