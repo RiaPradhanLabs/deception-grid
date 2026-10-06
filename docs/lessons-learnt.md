@@ -914,3 +914,35 @@ that count, 2,262 distinct sources, 80,845 real password attempts, 3,370
 successful logins from 562 sources, 130 TTY recordings, and no OT events that
 count — the door opens on 6 October. 10,171 attempts remain excluded as
 artefacts after 22 were recovered.*
+
+---
+
+# Addendum — 6 October 2026
+
+The OT door opened at 17:42:02 UTC; the opening itself is recorded in
+`docs/build.md` under *Order of opening* and in the project's check-in log. This
+addendum records the two decisions that came out of the morning's file audit and
+one measurement from the evening.
+
+**Two statements the project makes about itself were found false by reading its
+own files.** The findings notes had named nine third-party addresses in full
+for eleven days against the rules of engagement; redacted and recorded there as
+the third self-violation. And nine commits from 5 October carry an AI co-author
+trailer, against the note in the check-in log that morning that no trailer was
+to be used. **Decision: left as they are, recorded here, and the rule restated —
+commits in this repository carry no AI trailer.** Rewriting nine public commits
+to remove a line that discloses nothing sensitive would be a worse trade than the
+inconsistency; the project already made the same call about its own address.
+
+**A planned analysis was tested before it was started, and survived re-scoped.**
+`analysis/overlap-test.py` measured whether sources share credential dictionaries
+— the premise under about fifty hours of planned ML work. They do, for about a
+fifth of fingerprintable sources, inside a majority that share little or nothing;
+and the obvious clustering method reports a 41-source chain with no common
+credential as the largest campaign. Details in `analysis/README.md`. The lesson
+is the one this document already carries, applied to a plan rather than a figure:
+**before committing the hours, run the five-minute measurement the plan assumes.**
+
+*As at 6 October 2026, 18:40 UTC: 2,507 distinct sources, 91,345 real password
+attempts, 3,502 successful logins from 601 sources, 97,571 arrivals, and the OT
+door's first analyst-excluded records; no external OT source yet.*

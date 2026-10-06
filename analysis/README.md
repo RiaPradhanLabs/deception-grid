@@ -1,6 +1,6 @@
 # analysis/
 
-Eight files. This is what each one is for, what order to run them in, and the
+Nine files. This is what each one is for, what order to run them in, and the
 traps that are specific to this data.
 
 The one rule that governs all of it:
@@ -24,6 +24,7 @@ None were found by reading totals. A wrong total looks exactly like a right one.
 | 6 | `features-files.py` | **sensor only** | Static features of the captured files → one CSV. |
 | 7 | `features-tty.py` | laptop or sensor | Command timeline per TTY recording → one CSV. NOT keystroke timing; see below. |
 | 8 | `exclude-ips.txt.example` | — | The format for `exclude-ips.txt`, which is never committed. |
+| 9 | `overlap-test.py` | sensor | Read-only premise test for ML options 2 and 5: do sources share credential dictionaries? Prints aggregates only. |
 
 ---
 
@@ -187,6 +188,41 @@ total computed over a quietly filtered set looks exactly like a total.
 Rows with no interval at all are kept, not dropped. 62 of 130 recordings are one
 pasted command, and that proportion is itself the result.
 ---
+
+## overlap-test.py
+
+Written and run on 6 October 2026 because the recommended ML sequence — option 2
+(credential sets as campaign fingerprints) then option 5 (source–credential
+communities), about fifty hours — rested on a premise nobody had measured: that
+sources on this sensor *share* credential dictionaries. Read-only; one set of
+`(username, password)` pairs per source from `v_logins`; pairwise Jaccard over
+every source with at least five distinct pairs; aggregates only, no address or
+credential printed.
+
+**Result, as at 6 October 2026, 18:40 UTC** (91,345 login rows, 1,259 sources
+that tried a credential, 781 fingerprintable):
+
+| | |
+| --- | --- |
+| Sources with a near-identical twin (Jaccard ≥ 0.9 to some other source) | 171 of 781 — 22% |
+| Sources with a neighbour ≥ 0.3 | 405 — 52% |
+| Sources sharing nothing with anyone | 26 — 3% |
+| Components at ≥ 0.3 | 104, covering 405 sources |
+| Largest component | 41 sources, **0 pairs common to all** — a chain, not a dictionary |
+| Genuine shared lists | 18 sources with 893 pairs common to all; 10 with 146; 12 with 75 |
+
+So the premise holds **for a minority**: a few campaigns run large shared lists
+inside a majority of small or idiosyncratic scanners, and half the fingerprintable
+sources belong to no component at all. Two consequences for options 2 and 5:
+cluster with a common-core requirement or a higher threshold, because
+single-linkage at 0.3 reports a 41-source chain with no shared credential as the
+biggest campaign; and state the denominator — 781 fingerprintable of 2,507
+sources, 478 too small to say anything about. The finding is better than the one
+planned, because it has a result either way.
+
+Tested before use against a synthetic database with two planted dictionaries
+(30 and 20 sources), 40 loners and 50 too-small sources: both dictionaries
+recovered exactly, loners untouched, the small ones dropped and counted.
 
 ## Not in this repository
 
