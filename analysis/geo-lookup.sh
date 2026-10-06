@@ -47,9 +47,16 @@ sqlite3 "$GEO" 'CREATE TABLE IF NOT EXISTS geo (
 
 # The busiest sources by ARRIVALS, not by events: one stubborn scanner produces
 # tens of thousands of events and that is not the same as being widespread.
+#
+# v_arrivals, BOTH doors. Until 6 October 2026 this script filtered on
+# cowrie.session.connect alone -- it was written at 12:32 UTC on 29 September,
+# the v_arrivals view that fixed exactly that mistake in weekly.sql landed at
+# 15:47 the same day, and nobody came back to this file. The OT door opened on
+# 6 October, so from that day an IT-only filter under-counts arrivals and
+# disagrees with query 17, which already joins against v_arrivals.
 mapfile -t ips < <(sqlite3 "$DB" "
-  SELECT src_ip FROM v_events
-   WHERE eventid = 'cowrie.session.connect' AND src_ip IS NOT NULL
+  SELECT src_ip FROM v_arrivals
+   WHERE src_ip IS NOT NULL
    GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT $TOP;")
 
 echo "${#ips[@]} addresses to consider, pausing ${PAUSE}s between lookups"
@@ -85,13 +92,11 @@ echo
 # Coverage first, because a country table without it invites overreading.
 sqlite3 -header -column "$DB" "
 ATTACH '$GEO' AS g;
-SELECT (SELECT COUNT(*) FROM v_events e JOIN g.geo ON g.geo.src_ip = e.src_ip
-          WHERE e.eventid = 'cowrie.session.connect')              AS arrivals_covered,
-       (SELECT COUNT(*) FROM v_events
-          WHERE eventid = 'cowrie.session.connect')                AS arrivals_total,
+SELECT (SELECT COUNT(*) FROM v_arrivals e JOIN g.geo ON g.geo.src_ip = e.src_ip)
+                                                                   AS arrivals_covered,
+       (SELECT COUNT(*) FROM v_arrivals)                            AS arrivals_total,
        (SELECT COUNT(*) FROM g.geo)                                AS sources_looked_up,
-       (SELECT COUNT(DISTINCT src_ip) FROM v_events
-          WHERE eventid = 'cowrie.session.connect')                AS sources_total;"
+       (SELECT COUNT(DISTINCT src_ip) FROM v_arrivals)             AS sources_total;"
 
 echo
 sqlite3 -header -column "$DB" "
@@ -100,11 +105,9 @@ SELECT g.geo.cc                  AS country,
        COUNT(*)                  AS arrivals,
        COUNT(DISTINCT e.src_ip)  AS sources,
        ROUND(100.0 * COUNT(*) /
-             (SELECT COUNT(*) FROM v_events
-               WHERE eventid = 'cowrie.session.connect'), 1) AS pct_of_all_arrivals
-  FROM v_events e
+             (SELECT COUNT(*) FROM v_arrivals), 1) AS pct_of_all_arrivals
+  FROM v_arrivals e
   JOIN g.geo ON g.geo.src_ip = e.src_ip
- WHERE e.eventid = 'cowrie.session.connect'
  GROUP BY 1
  ORDER BY 2 DESC;"
 
