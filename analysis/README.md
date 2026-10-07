@@ -234,6 +234,25 @@ Tested before use against a synthetic database with two planted dictionaries
 (30 and 20 sources), 40 loners and 50 too-small sources: both dictionaries
 recovered exactly, loners untouched, the small ones dropped and counted.
 
+## Getting a file onto the sensor
+
+The sensor runs its own copies of these files and has no checkout. After a
+push, fetch from GitHub raw to `/tmp`, compare the blob id against the laptop's
+`git rev-parse HEAD:analysis/<file>` **inside the command**, and move only on
+a match:
+
+```
+cd ~/analysis && curl -fsS -H 'Cache-Control: no-cache' -o /tmp/weekly.new "https://raw.githubusercontent.com/RiaPradhanLabs/deception-grid/main/analysis/weekly.sql?v=$(date +%s)" && [ "$(git hash-object /tmp/weekly.new)" = "<blob>" ] && mv -f /tmp/weekly.new weekly.sql && echo DEPLOYED || echo "NOT DEPLOYED: $(git hash-object /tmp/weekly.new)"
+```
+
+Never `curl -o` onto the live path (a half transfer leaves half a file), never
+a redirect onto it (a redirect empties the target before the command runs —
+that happened here on 5 October), and never `hash-object && mv` with the
+comparison left to the reader — on 7 October that moved a stale copy the CDN
+had served, harmlessly only because it happened to be identical. Files copied
+from a Windows checkout instead of fetched carry CRLF: `sed -i 's/\r$//' f`
+before the hash will match.
+
 ## Not in this repository
 
 - `exclude-ips.txt` — a record of one person's home addresses over time. Mode

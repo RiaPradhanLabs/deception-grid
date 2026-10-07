@@ -81,8 +81,20 @@ written to show. Whether any of the eleven had already visited the IT door is
 a claim that needs its own query and has not been run; it is listed here so it
 is not quoted before it is measured.
 
+**Measured later the same morning (7 October, 09:30 UTC; queries 18 and 19,
+added in commit `8bcda64`).** Of the eleven OT sources, **two had already
+visited the IT door**, 4.1 and 8.8 days earlier; nine had not. Ten sources
+connected once; one connected four times. So on the first data point the
+visitors to the factory door are mostly not the visitors to the office door,
+and the two that were both took days, not minutes, between the doors — the
+pattern of a scanner working through ports over time, not one sweeping both at
+once. Two of eleven supports no stronger sentence than that; the queries now
+run at every check-in, and this paragraph is the baseline later runs are read
+against.
+
 ## Next look
 
 The recurring check-in reads the OT section of `decoy-status` on Mondays and
 Thursdays. The figure-freeze on 9 December takes the final numbers for both
-doors from queries 14–16 and states both opening dates beside them.
+doors from queries 14–16, 18 and 19 and states both opening dates beside
+them.

@@ -147,6 +147,22 @@ bash -n /tmp/decoy-status.new && sudo install -m 755 -o root -g root /tmp/decoy-
 sudo decoy-status | sed -n '/OT DECOY/,/^$/p'
 ```
 
+**Compare the hash in the command, not by eye, when the fetch and the install
+are chained.** On 7 October 2026 a one-liner of the form `curl … && git
+hash-object … && mv …` moved a stale copy into place: the CDN had served the
+previous commit, the hash was *printed* and nobody was comparing it, and `&&`
+only tests that `hash-object` ran. It was harmless once — the stale copy was
+byte-identical to the file already there — and wrong as a pattern. The form
+that cannot do that, with `<blob>` from the laptop's `git rev-parse HEAD:<path>`:
+
+```
+curl -fsS -H 'Cache-Control: no-cache' -o /tmp/x.new "<raw url>?v=$(date +%s)" && [ "$(git hash-object /tmp/x.new)" = "<blob>" ] && bash -n /tmp/x.new && sudo install -m 755 -o root -g root /tmp/x.new /usr/local/bin/x && echo DEPLOYED || echo "NOT DEPLOYED: $(git hash-object /tmp/x.new)"
+```
+
+`DEPLOYED` or the stale blob id; nothing moves on a mismatch. A raw-content
+CDN can lag a push by a few minutes, so `NOT DEPLOYED` with the previous
+commit's id means wait and run the same line again, not fetch some other way.
+
 Expect `ufw 502 ALLOW` and, until the first visitor arrives,
 `WARNING OT door open since 2026-10-06 and no external traffic at all`. **That
 warning firing now is correct, and is the first time it has been seen to fire
