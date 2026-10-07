@@ -272,6 +272,38 @@ SELECT CASE WHEN eventid LIKE 'conpot.%' THEN 'OT  (Modbus)'
  ORDER BY 2 DESC;
 
 .print
+.print === 18. Both doors: had the OT visitors already been to the IT door? ===
+-- The README's argument -- same scanners, same country, same minute, and the
+-- only difference between the doors is the door -- is a claim about the SAME
+-- sources turning up at both. Nothing measured that before 7 October 2026, so
+-- docs/first-ot-hours.md declined to say it. This is the query that asks.
+-- gap_days is from a source's first IT arrival to its first OT arrival;
+-- negative means it found the OT door first. Aggregates only: no address is
+-- printed, by the rules of engagement. The 19-character prefix of ts is used
+-- because Cowrie writes '...Z' and Conpot '...+00:00'; both are UTC.
+WITH ot AS (SELECT src_ip, MIN(substr(ts, 1, 19)) AS first_ot
+              FROM v_arrivals WHERE door = 'OT' GROUP BY 1),
+     it AS (SELECT src_ip, MIN(substr(ts, 1, 19)) AS first_it
+              FROM v_arrivals WHERE door = 'IT' GROUP BY 1)
+SELECT COUNT(*)                                            AS ot_sources,
+       COUNT(it.src_ip)                                    AS also_at_it_door,
+       ROUND(100.0 * COUNT(it.src_ip) / MAX(COUNT(*), 1), 1) AS pct,
+       ROUND(MIN(julianday(ot.first_ot) - julianday(it.first_it)), 1) AS gap_days_min,
+       ROUND(MAX(julianday(ot.first_ot) - julianday(it.first_it)), 1) AS gap_days_max
+  FROM ot LEFT JOIN it USING (src_ip);
+
+.print
+.print === 19. OT: return visits -- connections per source, as a distribution ===
+-- 14 connections from 11 sources in the first fourteen hours meant three return
+-- visits, and nothing showed which. This shows the shape without naming anyone:
+-- how many sources came once, how many twice, and so on.
+SELECT visits, COUNT(*) AS sources
+  FROM (SELECT src_ip, COUNT(*) AS visits
+          FROM v_arrivals WHERE door = 'OT' GROUP BY 1)
+ GROUP BY 1
+ ORDER BY 1;
+
+.print
 .print === 17. Registration country of the busiest sources ===
 -- Needs geo.sqlite, built by ./geo-lookup.sh. If that file does not exist yet
 -- this query reports "no such table: g.geo" and stops there; queries 1 to 16

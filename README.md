@@ -51,7 +51,7 @@ same country, same minute; the only difference between the doors is the door.
 | Host | Azure B2ats_v2, Ubuntu 24.04 LTS, Austria East, 64 GiB Premium SSD (P6), 1 GB swap |
 | Hardening | Admin SSH on a non-standard port, key-only, restricted to one address at the network security group (re-pointed daily by `scripts/allow-me.ps1`); `ufw` default-deny; outbound rejected for both decoy accounts |
 | Decoys | Cowrie (22, 23) under systemd socket activation; Conpot (502) under `CAP_NET_BIND_SERVICE`, Python 3.14 via `uv` |
-| Pipeline | `backup.ps1` pulls the logs to the laptop; `ingest.py` builds `decoy.sqlite` on the sensor; `weekly.sql` holds the seventeen standing questions; `figures.sh` refreshes every quoted figure with an as-of line |
+| Pipeline | `backup.ps1` pulls the logs to the laptop; `ingest.py` builds `decoy.sqlite` on the sensor; `weekly.sql` holds the nineteen standing questions; `figures.sh` refreshes every quoted figure with an as-of line |
 | Analysis | MITRE ATT&CK mapping in the findings notes; static feature extraction for the captured files and TTY recordings (`analysis/features-*.py`); registration-country lookup (`analysis/geo-lookup.sh`) |
 
 Full build steps, including what went wrong: [`docs/build.md`](docs/build.md).

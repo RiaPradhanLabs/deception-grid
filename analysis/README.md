@@ -18,7 +18,7 @@ None were found by reading totals. A wrong total looks exactly like a right one.
 | --- | --- | --- | --- |
 | 1 | `ingest.py` | sensor | Reads the decoys' logs into `decoy.sqlite`. Re-derives every column each run. |
 | 2 | `schema.sql` | — | Applied by `ingest.py`. Tables and the `v_*` views. Not run by hand. |
-| 3 | `weekly.sql` | sensor | The 17 standing questions. Never retype a query — add it here. |
+| 3 | `weekly.sql` | sensor | The 19 standing questions. Never retype a query — add it here. |
 | 4 | `figures.sh` | sensor | Refreshes the database, runs every query, prints an as-of line and the figure map. **Use this, not the queries directly, whenever a number is going into a document.** |
 | 5 | `geo-lookup.sh` | sensor | Fills `geo.sqlite` for query 17. Optional; queries 1–16 work without it. |
 | 6 | `features-files.py` | **sensor only** | Static features of the captured files → one CSV. |
@@ -99,9 +99,12 @@ Three to know about before quoting anything:
   `file_download` with a url *and* a `shasum`/`outfile`; `file_download.failed`
   carries a url and is the block working. Never count files in the downloads
   directory as a proxy for any of the kinds.
-- **Queries 14–16** — the OT door and the comparison. The first fourteen hours
-  are written up in `docs/first-ot-hours.md`; the figures there are the ones to
-  compare any later run against.
+- **Queries 14–16, 18 and 19** — the OT door and the comparison. The first
+  fourteen hours are written up in `docs/first-ot-hours.md`; the figures there
+  are the ones to compare any later run against. Query 18 is the one that tests
+  the README's claim that the same sources visit both doors; 19 shows return
+  visits as a distribution. Both print aggregates only. They sit before query
+  17 in the file because 17 attaches `geo.sqlite` and is kept last.
 
 ## figures.sh
 
