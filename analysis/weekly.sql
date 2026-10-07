@@ -229,7 +229,10 @@ SELECT event,
 -- The finding is WHAT was asked for, not that a connection happened. Function 3
 -- or 4 is a read: reconnaissance. Function 5, 6, 15 or 16 is a WRITE -- an
 -- attempt to change a coil or a register, which on real plant is an attempt to
--- operate it. Function 43 is Read Device Identification: vendor fingerprinting.
+-- operate it. Function 43 is Read Device Identification: vendor fingerprinting;
+-- 17 is Report Server ID, the older serial-line form of the same question.
+-- 17 was labelled 'other / unhandled' until 7 October 2026, when the first
+-- stranger to use it arrived; the count was right, the label was not.
 SELECT function_code,
        CASE function_code
          WHEN  1 THEN 'read coils'
@@ -240,6 +243,7 @@ SELECT function_code,
          WHEN  6 THEN 'WRITE single register'
          WHEN 15 THEN 'WRITE multiple coils'
          WHEN 16 THEN 'WRITE multiple registers'
+         WHEN 17 THEN 'report server id'
          WHEN 43 THEN 'read device identification'
          ELSE        'other / unhandled'
        END                        AS meaning,

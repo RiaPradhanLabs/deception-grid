@@ -550,7 +550,8 @@ pre-change timestamp     2026-10-06T17:39:38Z
 NSG rule                 allow-modbus-502, priority 330, in decoy-01-nsg
                          (source and protocol copied from the port-22/23 rules)
 ufw                      502/tcp allowed at 2026-10-06T17:42:02Z   <- the opening instant
-first external arrival   none by 17:51 UTC, when the opening session closed; see the check-in log for the first
+first external arrival   none by 17:51 UTC, when the opening session closed, nor by 19:13;
+                         2026-10-06T20:14Z, 2 h 32 min after opening -- see docs/first-ot-hours.md
 ```
 
 Both firewall layers were opened in the runbook's order — NSG first, with ufw

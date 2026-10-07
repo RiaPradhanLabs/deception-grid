@@ -17,8 +17,11 @@ ReDI School Cybersecurity capstone · Hamburg · autumn 2026
 `[TBC — image: the IT-versus-controller split]`
 
 Until then, the dated findings notes carry the figures, each with its as-of
-time: [`docs/first-contact.md`](docs/first-contact.md) (the first forty
-minutes), [`docs/first-weekend.md`](docs/first-weekend.md) (the first four days).
+time: [`docs/first-contact.md`](docs/first-contact.md) (the IT door's first
+forty minutes), [`docs/first-weekend.md`](docs/first-weekend.md) (its first four
+days), [`docs/first-ot-hours.md`](docs/first-ot-hours.md) (the OT door's first
+fourteen hours: 2 h 32 min to the first stranger, and every request an
+identification).
 
 ## What this is
 

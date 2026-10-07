@@ -85,16 +85,23 @@ Three to know about before quoting anything:
 
 - **Query 3** — what was excluded and why. State this alongside any figure. At
   figure-freeze time, take the exclusion tally *from here* rather than adjusting
-  an older number: the exclusion rule was rewritten five times, so the old
+  an older number: the exclusion rule went through six versions, so the old
   figures cannot be arithmetically updated.
 - **Query 12** — login rows that contain an escape sequence and still count. It
   points the opposite way from query 3 on purpose. Query 3 shows what the rule
   threw out; query 12 shows what it let through.
 - **Query 13** — the file taxonomy. Cowrie logs three different things under the
   single event id `cowrie.session.file_download`, and conflating them produced
-  five wrong figures in one morning. The discriminator is whether the event
-  carries a `url` field. Never count files in the downloads directory as a proxy
-  for any of the three.
+  five wrong figures in one morning. The discriminator is **not** simply whether
+  the event carries a `url` field — that wrong rule sat in this file's own
+  comments until 5 October and made `figures.sh` raise a false alarm on every
+  run for a week. Read the four cases in the query itself: a fetch is
+  `file_download` with a url *and* a `shasum`/`outfile`; `file_download.failed`
+  carries a url and is the block working. Never count files in the downloads
+  directory as a proxy for any of the kinds.
+- **Queries 14–16** — the OT door and the comparison. The first fourteen hours
+  are written up in `docs/first-ot-hours.md`; the figures there are the ones to
+  compare any later run against.
 
 ## figures.sh
 
