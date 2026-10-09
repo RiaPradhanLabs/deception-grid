@@ -27,6 +27,7 @@ None were found by reading totals. A wrong total looks exactly like a right one.
 | 9 | `overlap-test.py` | sensor | Read-only premise test for ML options 2 and 5: do sources share credential dictionaries? Prints aggregates only. |
 | 10 | `option4-telemetry.sql` | sensor | Read-only premise test for ML option 4: how much pre-login telemetry do successful sessions carry, and how many escalate? Aggregates only. |
 | 11 | `option4-clients.sql` | sensor | M3, the last gate on option 4: do the SSH client version strings and HASSH fingerprints vary across the sessions that got in, and does escalation vary with them? Aggregates only. |
+| 12 | `fingerprints.py` | sensor | ML option 2, first pass: credential sets as campaign fingerprints — denominator, twins, common-core clusters. Prints credential pairs and counts, never an address. |
 
 ---
 
@@ -268,6 +269,30 @@ value escalating at the same rate, means the pre-login prefix carries no signal.
 ```
 cd ~/analysis && sqlite3 -header -column decoy.sqlite < option4-clients.sql
 ```
+
+## fingerprints.py
+
+ML option 2's first pass, written on 9 October 2026 after `overlap-test.py`
+had shown why single-linkage clustering must not be used here. Read-only,
+standard library. One credential set per source from `v_logins`; sources with
+fewer than five distinct pairs are the stated denominator gap, never clustered.
+Twins (identical sets, or Jaccard ≥ 0.9) are counted. Then **common-core
+clustering**: sources are visited largest-set first and join the cluster whose
+running intersection with their set stays at or above ten pairs — so a chain
+of pairwise-similar sources that share nothing overall cannot become one
+"campaign". Greedy and order-dependent, which the output says.
+
+```
+cd ~/analysis && python3 fingerprints.py
+cd ~/analysis && python3 fingerprints.py --db decoy-2026-10-09T0918Z.sqlite --core 10 --min 5
+```
+
+Tested before its first real run on a synthetic database with two planted
+lists (one tried to random prefix lengths, one identical), a sliding chain, ten
+unique sets and thirty under-sized sources: it found the two lists as two
+clusters, broke the chain into pairs, left the unique sets alone and counted
+the gap. Credential pairs appear in the output because they are the finding;
+no address does.
 
 ## Getting a file onto the sensor
 
