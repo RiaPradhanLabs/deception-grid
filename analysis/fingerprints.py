@@ -48,7 +48,11 @@ What it does:
      the Adjusted Rand Index of each against the largest-first run, plus how
      often the members of the largest clusters stay together -- the
      order-dependence, measured rather than disclaimed.
-What it prints: denominators; universal pairs; twin counts; cluster count and
+  7. --clients joins each cluster to the SSH client strings and HASSH
+     fingerprints its members announced (the twelve clients of
+     docs/who-gets-in.md): a campaign that is one tool shows as one string.
+     --success counts, per cluster, the sources that got in and their logins.
+What it prints: denominators; glue pairs; twin counts; cluster count and
                 size distribution;
                 for the largest clusters, size, core size, median set size, day
                 span, doors, and the five most-tried pairs IN THE CORE.
@@ -71,6 +75,8 @@ ap.add_argument("--rel", type=float, default=0.5, help="core must also be >= thi
 ap.add_argument("--common", type=float, default=0.05, help="pairs tried by more than this fraction of fingerprintable sources are common glue and ignored")
 ap.add_argument("--shuffle", type=int, default=0, help="re-run the clustering in N random orders and report stability")
 ap.add_argument("--legacy", action="store_true", help="first-version rule: absolute core only, universal pairs kept")
+ap.add_argument("--clients", action="store_true", help="per cluster: dominant SSH client string, its share, distinct HASSH, door mix")
+ap.add_argument("--success", action="store_true", help="per cluster: sources that got in and successful logins")
 ap.add_argument("--top", type=int, default=8, help="clusters to describe")
 args = ap.parse_args()
 
@@ -82,15 +88,28 @@ rows = db.execute(
 doors = dict(db.execute(
     "SELECT src_ip, GROUP_CONCAT(DISTINCT door) FROM v_arrivals "
     "WHERE src_ip IS NOT NULL GROUP BY src_ip").fetchall())
+cli_ver, cli_hassh = defaultdict(Counter), defaultdict(Counter)
+if args.clients:
+    for ip, v in db.execute(
+            "SELECT src_ip, json_extract(raw, '$.version') FROM events "
+            "WHERE excluded IS NULL AND eventid = 'cowrie.client.version' AND src_ip IS NOT NULL"):
+        cli_ver[ip][v or "?"] += 1
+    for ip, h in db.execute(
+            "SELECT src_ip, json_extract(raw, '$.hassh') FROM events "
+            "WHERE excluded IS NULL AND eventid = 'cowrie.client.kex' AND src_ip IS NOT NULL"):
+        cli_hassh[ip][h or "?"] += 1
 db.close()
 
 sets = defaultdict(set)
 days = defaultdict(set)
 tries = Counter()
+succ = Counter()
 for ip, u, p, day, ok in rows:
     sets[ip].add((u, p))
     days[ip].add(day)
     tries[(u, p)] += 1
+    if ok:
+        succ[ip] += 1
 
 all_sources = len(sets)
 fp = {ip: s for ip, s in sets.items() if len(s) >= args.min}
@@ -239,6 +258,56 @@ for r, c in enumerate(multi[:args.top], 1):
           % (r, len(m), len(c["core"]), median(len(fp[ip]) for ip in m),
              span[0], span[1][5:], span[2][5:], "+".join(sorted(dset)),
              "  ".join("%s/%s(%d)" % (u, p, tries[(u, p)]) for u, p in top)))
+    extra = []
+    if args.clients:
+        vers = Counter()
+        hs = set()
+        telnet_only = 0
+        for ip in m:
+            if cli_ver.get(ip):
+                vers[cli_ver[ip].most_common(1)[0][0]] += 1
+                hs.update(cli_hassh.get(ip, {}).keys())
+            else:
+                telnet_only += 1
+        if vers:
+            dom, dn = vers.most_common(1)[0]
+            extra.append("clients: %d of %d on %s%s; %d distinct string%s, %d HASSH%s"
+                         % (dn, len(m), dom,
+                            "" if telnet_only == 0 else " (%d telnet-only)" % telnet_only,
+                            len(vers), "" if len(vers) == 1 else "s",
+                            len(hs), "" if len(hs) == 1 else "es"))
+        else:
+            extra.append("clients: telnet only (%d), no SSH client string" % len(m))
+    if args.success:
+        got_in = sum(1 for ip in m if succ.get(ip))
+        extra.append("got in: %d of %d sources, %d successful logins" % (got_in, len(m), sum(succ.get(ip, 0) for ip in m)))
+    for e in extra:
+        print("        %s" % e)
+    if args.clients and len(m) >= 3:
+        vers_ = Counter(cli_ver[ip].most_common(1)[0][0] for ip in m if cli_ver.get(ip))
+        c["single_client"] = bool(vers_) and vers_.most_common(1)[0][1] >= 0.9 * len(m)
+
+if args.clients:
+    big3 = [c for c in multi if len(c["members"]) >= 3]
+    # evaluate single-client for every cluster of >= 3, not only the printed ones
+    sc = 0
+    for c in big3:
+        vers_ = Counter(cli_ver[ip].most_common(1)[0][0] for ip in c["members"] if cli_ver.get(ip))
+        if vers_ and vers_.most_common(1)[0][1] >= 0.9 * len(c["members"]):
+            sc += 1
+    print()
+    print("clusters x clients")
+    print("  clusters with >=3 sources      %d   of which single-client (>=90%% one SSH string) %d" % (len(big3), sc))
+    print("  (a campaign that is one tool shows as one client string; a shared list run by")
+    print("   many tools shows as several -- the join between options 2 and 4)")
+if args.success:
+    print()
+    print("clusters x success")
+    tot_in = sum(1 for c in multi for ip in c["members"] if succ.get(ip))
+    tot_src = sum(len(c["members"]) for c in multi)
+    print("  clustered sources that got in  %d of %d" % (tot_in, tot_src))
+    print("  unclustered that got in        %d of %d"
+          % (sum(1 for c in clusters if len(c["members"]) == 1 and succ.get(c["members"][0])), single))
 
 # --- order-independence -----------------------------------------------------
 def labels_of(cl):

@@ -27,7 +27,7 @@ None were found by reading totals. A wrong total looks exactly like a right one.
 | 9 | `overlap-test.py` | sensor | Read-only premise test for ML options 2 and 5: do sources share credential dictionaries? Prints aggregates only. |
 | 10 | `option4-telemetry.sql` | sensor | Read-only premise test for ML option 4: how much pre-login telemetry do successful sessions carry, and how many escalate? Aggregates only. |
 | 11 | `option4-clients.sql` | sensor | M3, the last gate on option 4: do the SSH client version strings and HASSH fingerprints vary across the sessions that got in, and does escalation vary with them? Aggregates only. |
-| 12 | `fingerprints.py` | sensor | ML option 2: credential sets as campaign fingerprints — denominator, universal pairs, twins, relative common-core clusters, `--shuffle` order-independence. Prints credential pairs and counts, never an address. |
+| 12 | `fingerprints.py` | sensor | ML option 2: credential sets as campaign fingerprints — denominator, glue pairs, twins, relative common-core clusters, `--shuffle` order-independence, `--clients` (which SSH tool runs each campaign), `--success` (which campaigns get in). Prints credential pairs, client strings and counts, never an address. |
 
 ---
 
@@ -319,7 +319,18 @@ output shows the largest identical-set group beside the threshold.
 
 ```
 cd ~/analysis && python3 fingerprints.py --shuffle 10
+cd ~/analysis && python3 fingerprints.py --shuffle 10 --clients --success
 ```
+
+`--clients` joins each cluster to the SSH client strings and HASSH
+fingerprints its member sources announced (the twelve clients of
+`docs/who-gets-in.md`) — the join between options 2 and 4: a campaign that is
+one tool shows as one string, a shared list run by several tools as several;
+telnet-only members are counted as such. `--success` adds, per cluster, the
+sources that got in and their successful logins, and a totals line for
+clustered against unclustered sources. Tested on a synthetic database with one
+planted campaign on a single client (half its sources succeeding) and one
+split across two clients (none succeeding).
 
 ## Getting a file onto the sensor
 
