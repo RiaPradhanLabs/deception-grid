@@ -589,6 +589,53 @@ about updates in the abstract.** The risk here is real and specific, and it did
 not apply to these five. It will apply to some later set, and `decoy-status` is
 what will catch it.
 
+### The first kernel upgrade, 9 October 2026
+
+It applied to the next set. On 6 October `apt list --upgradable` showed nine
+packages, six of them the kernel (`linux-image-azure` 7.0.0-1014 → 1017). A
+reboot during the OT door's first hours was the wrong moment, so the patch was
+deferred to the Thursday check-in, and then slipped a day to Friday.
+
+What Friday found changed the picture of who does the patching. The machine's
+`unattended-upgrades` had installed the new kernel image itself at **06:24 UTC
+on 9 October**, with `sudo` and a handful of others, and four packages two days
+earlier — security updates land daily, at around 06:00 UTC, whether or not
+anyone planned to apply them. What it does **not** do is reboot: uptime at
+06:50 was 13 days 22 hours, and `uname -r` still said 1014. So on this machine
+the running kernel lags the installed one until someone reboots, and the
+decision "check the set, then apply" is really "check the set, then *reboot*".
+The before.rules check keeps its point either way, because the package that
+could replace the file is installed by the same daemon on the same schedule;
+`decoy-status` runs the check on every call regardless of who installed what.
+
+The window, from the shell's own clock:
+
+```
+before picture           06:50:22Z  IT 3,010 sources / 624,190 events / 154 files;
+                                    OT 42 external / 264 records; both uid blocks present;
+                                    uptime 13 d 22 h 55 min; kernel 7.0.0-1014-azure
+window start             2026-10-09T06:52:01Z
+apt-get upgrade          applied sosreport only; three held back by phasing;
+                         ufw 0.36.2-6 unchanged; /etc/ufw/before.rules dated 29 Sep 15:24,
+                         before.rules.orig present; grep -c 'uid-owner' = 2
+sudo reboot              2026-10-09T06:54:31Z
+machine up               ~06:54:50Z  (uptime 43 min at 07:37:49)
+analyst logged back in   07:22:20Z   (banner; no host-key warning on 62222)
+window end               2026-10-09T07:35:13Z  kernel 7.0.0-1017-azure, 0 updates pending
+after picture            07:37:49Z  both decoys running; both uid blocks present; ufw 502 ALLOW;
+                                    IT 3,022 / 627,272 / 154, last event 0 min ago;
+                                    OT 42 external / 266 records, last event 07:27:00
+```
+
+The decoys were unreachable for about twenty seconds. The twenty-eight minutes
+between the boot and the login were the analyst's, not the machine's — the
+prediction before the after picture was "uptime about 13 minutes", and the 43
+that printed is the correction, kept here as the other wrong predictions are.
+Nothing in the firewall path moved: the rule count was 2 before the reboot and
+both block lines printed after it, so the recovery procedure (`dgtest`, then
+`ufw reload`) was not needed and was not run. Two Conpot records arrived
+between the pictures, the later of them at 07:27, after the door was back.
+
 ## Known limitations
 
 **The fake user is Cowrie's default.** `/etc/passwd` in the imitation contains
