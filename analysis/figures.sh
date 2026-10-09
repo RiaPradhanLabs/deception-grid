@@ -137,6 +137,20 @@ cat <<'MAP'
     - the exclusion tally, which query 3 says to state alongside any figure
     - the OT decoy's verified reads
 
+  docs/first-ot-hours.md               (queries 14, 15, 15b, 16, 18, 19)
+    - OT sources, Modbus requests by function code, non-Modbus frames
+    - OT sources also seen at the IT door, with the gap in days; return visits
+    - CAVEAT TO KEEP: the doors opened eleven days apart; every table carries
+      both dates. The 7 October paragraph is the baseline, not the finding.
+
+  docs/who-gets-in.md                  (option4-telemetry.sql, option4-clients.sql,
+                                        fingerprints.py --shuffle 10 --clients --success)
+    - sessions that logged in, by door; pre-login telemetry; escalation by client
+    - the client version strings and HASSH counts; the campaigns table
+    - CAVEAT TO KEEP: "got in" is decided by Cowrie's userdb.txt as much as by
+      the attacker; counts are sessions, not sources; glue threshold and core
+      rule stated with every cluster figure.
+
   the slide deck
     - hook, speed, passwords, origins slides
     - CAVEAT TO KEEP: origins are REGISTRATION, not location, and the
