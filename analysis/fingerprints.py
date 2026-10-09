@@ -48,6 +48,10 @@ What it does:
      the Adjusted Rand Index of each against the largest-first run, plus how
      often the members of the largest clusters stay together -- the
      order-dependence, measured rather than disclaimed.
+  8. --timeline prints sources active per UTC day for the largest clusters and
+     new-campaign starts per day -- the data for a campaigns chart.
+  9. --csv PATH writes one row per cluster with no address column, for the
+     laptop and for option 5; it refuses to overwrite an existing file.
   7. --clients joins each cluster to the SSH client strings and HASSH
      fingerprints its members announced (the twelve clients of
      docs/who-gets-in.md): a campaign that is one tool shows as one string.
@@ -77,8 +81,16 @@ ap.add_argument("--shuffle", type=int, default=0, help="re-run the clustering in
 ap.add_argument("--legacy", action="store_true", help="first-version rule: absolute core only, universal pairs kept")
 ap.add_argument("--clients", action="store_true", help="per cluster: dominant SSH client string, its share, distinct HASSH, door mix")
 ap.add_argument("--success", action="store_true", help="per cluster: sources that got in and successful logins")
+ap.add_argument("--timeline", action="store_true", help="per large cluster: sources active per day; plus new-campaign starts per day")
+ap.add_argument("--csv", metavar="PATH", help="write one anonymised row per cluster (no address column); refuses to overwrite")
 ap.add_argument("--top", type=int, default=8, help="clusters to describe")
 args = ap.parse_args()
+if args.csv:
+    args.clients = True   # the CSV carries the client columns
+
+import os
+if args.csv and os.path.exists(args.csv):
+    sys.exit("refusing to overwrite %s -- choose another name" % args.csv)
 
 t0 = time.time()
 db = sqlite3.connect("file:%s?mode=ro" % args.db, uri=True)
@@ -308,6 +320,48 @@ if args.success:
     print("  clustered sources that got in  %d of %d" % (tot_in, tot_src))
     print("  unclustered that got in        %d of %d"
           % (sum(1 for c in clusters if len(c["members"]) == 1 and succ.get(c["members"][0])), single))
+
+if args.timeline:
+    print()
+    print("timeline (sources active per day, largest clusters; dates are UTC days)")
+    all_days = sorted(set().union(*days.values())) if days else []
+    print("  day          " + " ".join(d[5:] for d in all_days))
+    for r, c in enumerate(multi[:args.top], 1):
+        per_day = [sum(1 for ip in c["members"] if d in days[ip]) for d in all_days]
+        print("  cluster #%-3d " % r + " ".join("%5d" % v if v else "    ." for v in per_day))
+    starts = Counter(min(set().union(*(days[ip] for ip in c["members"]))) for c in multi)
+    print("  new campaigns first seen per day:")
+    print("               " + " ".join("%5d" % starts.get(d, 0) for d in all_days))
+
+if args.csv:
+    import csv
+    with open(args.csv, "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["cluster_id", "sources", "core_pairs", "median_set", "first_day", "last_day",
+                    "days_span", "doors", "dominant_client", "client_share", "distinct_hassh",
+                    "telnet_only", "sources_got_in", "successful_logins", "top_core_pairs"])
+        for r, c in enumerate(multi, 1):
+            m = c["members"]
+            allday = set().union(*(days[ip] for ip in m))
+            dset = set()
+            for ip in m:
+                for d in (doors.get(ip) or "?").split(","):
+                    dset.add(d)
+            vers = Counter(cli_ver[ip].most_common(1)[0][0] for ip in m if cli_ver.get(ip))
+            hs = set()
+            for ip in m:
+                hs.update(cli_hassh.get(ip, {}).keys())
+            dom, dn = (vers.most_common(1)[0] if vers else ("", 0))
+            top = sorted(c["core"], key=lambda pr: -tries[pr])[:5]
+            w.writerow([r, len(m), len(c["core"]), median(len(fp[ip]) for ip in m),
+                        min(allday), max(allday), len(allday), "+".join(sorted(dset)),
+                        dom, round(dn / float(len(m)), 3) if vers else "", len(hs),
+                        sum(1 for ip in m if not cli_ver.get(ip)),
+                        sum(1 for ip in m if succ.get(ip)), sum(succ.get(ip, 0) for ip in m),
+                        " ".join("%s/%s" % (u, p) for u, p in top)])
+    print()
+    print("  wrote %s: %d cluster rows, no address column (check: grep -E for a dotted quad)"
+          % (args.csv, len(multi)))
 
 # --- order-independence -----------------------------------------------------
 def labels_of(cl):
