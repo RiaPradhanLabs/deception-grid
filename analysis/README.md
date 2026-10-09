@@ -101,7 +101,11 @@ Three to know about before quoting anything:
   directory as a proxy for any of the kinds.
 - **Queries 14–16, 18 and 19** — the OT door and the comparison. The first
   fourteen hours are written up in `docs/first-ot-hours.md`; the figures there
-  are the ones to compare any later run against. Query 18 is the one that tests
+  are the ones to compare any later run against. Query 15 counts only frames
+  whose MBAP protocol identifier is `0000` — genuine Modbus/TCP — and line 15b
+  beneath it counts the frames that are not, by protocol id and length: on
+  8 October a 14-byte probe with protocol id `0001` was logged as function
+  code 0 and sat in the table as a "request" until the filter was added. Query 18 is the one that tests
   the README's claim that the same sources visit both doors; 19 shows return
   visits as a distribution. Both print aggregates only. They sit before query
   17 in the file because 17 attaches `geo.sqlite` and is kept last.
