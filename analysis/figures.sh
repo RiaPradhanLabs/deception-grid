@@ -165,6 +165,11 @@ cat <<'MAP'
     - err-tty slide: deliberately carries NO figure on its face. Its
       numbers live in its speaker notes under a 9 December refresh
       marker, because every one of them moves daily.
+    - who-gets-in and campaigns slides (reserve, added 9 October 2026):
+      the same pattern -- qualitative faces, every figure in the notes
+      under the refresh marker, sourced from option4-telemetry.sql,
+      option4-clients.sql and fingerprints.py (--shuffle 10 --clients
+      --success --timeline). Refresh the notes, keep the faces.
 
   ALWAYS, in every document:
     - lead with distinct sources, never events
