@@ -26,6 +26,7 @@ None were found by reading totals. A wrong total looks exactly like a right one.
 | 8 | `exclude-ips.txt.example` | — | The format for `exclude-ips.txt`, which is never committed. |
 | 9 | `overlap-test.py` | sensor | Read-only premise test for ML options 2 and 5: do sources share credential dictionaries? Prints aggregates only. |
 | 10 | `option4-telemetry.sql` | sensor | Read-only premise test for ML option 4: how much pre-login telemetry do successful sessions carry, and how many escalate? Aggregates only. |
+| 11 | `option4-clients.sql` | sensor | M3, the last gate on option 4: do the SSH client version strings and HASSH fingerprints vary across the sessions that got in, and does escalation vary with them? Aggregates only. |
 
 ---
 
@@ -257,6 +258,16 @@ cd ~/analysis && sqlite3 -header -column decoy.sqlite < option4-telemetry.sql
 
 The result and what it decided are recorded in the ML spin-off document and
 the project's check-in log, with the as-of time.
+
+`option4-clients.sql` is the follow-up (M3), written the same day once M2 had
+narrowed the option to SSH: distinct client version strings and HASSH
+fingerprints among the SSH sessions that got in, how concentrated they are, and
+the escalation rate per value. One value holding nearly every session, or every
+value escalating at the same rate, means the pre-login prefix carries no signal.
+
+```
+cd ~/analysis && sqlite3 -header -column decoy.sqlite < option4-clients.sql
+```
 
 ## Getting a file onto the sensor
 
