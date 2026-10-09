@@ -81,6 +81,28 @@ sessions that look most automated do the most once inside.
 fetch, pushed a file over scp, or wrote one by shell redirection; 8.7 % of
 telnet sessions did. Telnet logins are more numerous and do less.
 
+**Measured later the same day (15:31 UTC, `analysis/fingerprints.py
+--clients --success`, commit `259b879`).** The credential lists the visitors
+try were clustered into campaigns the same afternoon (a cluster = sources whose
+lists share a core of at least ten pairs and at least half the median list,
+after the 52 pairs that more than 5 % of all sources carry are set aside). Of
+the 39 campaigns with three or more sources, **32 are one client program**, and
+every one of the eight largest is: the biggest — nineteen sources sharing 868
+of a ~1,100-pair dictionary over thirteen days — is `SSH-2.0-Go`; the
+`admin/Admin@20xx` list is `libssh_0.9.5`, eleven of eleven. And the AsyncSSH
+sessions above have a name now: **fifteen sources running one `admin/1111`
+list, every one of which logged in (61 logins) and none of which did anything
+afterwards.** The sixty-one sessions, the fifteen sources, the one list and the
+zero escalations are the same campaign seen from four sides. The only telnet
+campaign among the eight largest — the Mirai list, `root/xmhdipc`,
+`root/juantech`, `root/888888`, eight sources — accounts for **1,035 of the
+3,871 successful logins** on the sensor.
+
+One caveat travels with every "got in" figure in this note: **the decoy
+decides what succeeds.** Cowrie's `userdb.txt` accepts broadly by design, so a
+long dictionary logs in because the list is long, not because the attacker is
+good. "Got in" describes the honeypot's door as much as the visitor.
+
 ## How to read it
 
 - **Counts are sessions, not sources.** 508 Go sessions came from 90 sources;
