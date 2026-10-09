@@ -946,3 +946,40 @@ is the one this document already carries, applied to a plan rather than a figure
 *As at 6 October 2026, 18:40 UTC: 2,507 distinct sources, 91,345 real password
 attempts, 3,502 successful logins from 601 sources, 97,571 arrivals, and the OT
 door's first analyst-excluded records; no external OT source yet.*
+
+# Addendum — 9 October 2026
+
+The first kernel upgrade, recorded in full in `docs/build.md` under *Patching*.
+One lesson from it, and one measurement.
+
+**The patching rule was aimed at the wrong verb.** *Check what is in the update
+set before applying it* assumed a person applies the set. On this machine
+`unattended-upgrades` applies it — every morning at about 06:00 UTC, kernels
+included — and on 9 October had done so at 06:24, before anyone looked. What it
+does not do is reboot (`Automatic-Reboot` is unset, so `false`), which is why
+the kernel was installed and the machine still ran the old one on thirteen days
+of uptime. The decision a person makes here is *when to reboot*, and the thing to
+check before making it is the file the upgrade could have replaced —
+`grep -c 'uid-owner' /etc/ufw/before.rules` must say 2 — not the package list,
+which has already been acted on. The rule in `build.md` stands as written for
+the file check; the "apply" step in it was already done by the daemon. The
+reboot cost about twenty seconds of collection; the twenty-eight minutes between
+the machine coming back and the analyst logging in were the analyst's, and the
+prediction "uptime about 13 minutes" was wrong by thirty because of it. Kept,
+as the others are.
+
+**The OT door's second measurement moved the first one.** On 7 October, 2 of 11
+OT sources had visited the IT door, with gaps of 4.1 and 8.8 days, and 1 of 11
+had returned. On 9 October, 8 of 41 (19.5 %) had visited the IT door, the
+shortest gap under about seventy minutes and the longest 13.4 days; 14 of 41
+had returned, one of them thirteen times. The first paragraph said "two of
+eleven supports no stronger sentence" — and the second data point supports a
+different one: the shortest gap went from days to minutes, which is a sweeper
+doing both ports at once, something the first eleven sources had not shown. The
+baseline paragraph in `first-ot-hours.md` was right to call itself the baseline
+and not the finding. Both pictures are kept there, dated.
+
+*As at 9 October 2026, 07:59 UTC: 3,053 distinct sources across both doors
+(IT 3,020, OT 41, 8 shared), 111,571 real password attempts, 3,871 successful
+logins from 697 sources, 118,677 arrivals; 154 files held, 90 distinct hashes
+recorded in the log; outbound fetches that succeeded since the block: 0.*

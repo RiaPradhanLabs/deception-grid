@@ -608,6 +608,15 @@ The before.rules check keeps its point either way, because the package that
 could replace the file is installed by the same daemon on the same schedule;
 `decoy-status` runs the check on every call regardless of who installed what.
 
+Read from the configuration afterwards (9 October, 07:58 UTC):
+`/etc/apt/apt.conf.d/20auto-upgrades` has `Update-Package-Lists "1"` and
+`Unattended-Upgrade "1"` — daily; `50unattended-upgrades` allows the release
+pocket, `-security` and the two ESM security pockets, not `-updates`, which is
+why `sosreport` waited for a hand-run `apt-get upgrade`; and it has no
+uncommented `Automatic-Reboot` line, so the default `false` applies. Those
+three lines are the whole explanation for "kernel installed, machine not
+rebooted, thirteen days of uptime".
+
 The window, from the shell's own clock:
 
 ```

@@ -7,10 +7,11 @@ opening*). This note records its first fourteen hours, for the same reason
 is the one the rest of the collection is measured against, and the comparison
 between the two doors is the question this project exists to answer.
 
-Every figure is as at **08:16 UTC on 7 October**, from `ingest.py` and queries
-14–16 of `weekly.sql`, with the analyst's own test connections excluded by the
-date-scoped window. No source address appears here, by the rules of engagement;
-sources are counted, not named.
+Every figure is as at **08:16 UTC on 7 October** unless a paragraph says
+otherwise, from `ingest.py` and queries 14–16 of `weekly.sql`, with the
+analyst's own test connections excluded by the date-scoped window. No source
+address appears here, by the rules of engagement; sources are counted, not
+named.
 
 ## Summary
 
@@ -91,6 +92,28 @@ pattern of a scanner working through ports over time, not one sweeping both at
 once. Two of eleven supports no stronger sentence than that; the queries now
 run at every check-in, and this paragraph is the baseline later runs are read
 against.
+
+**Measured again on 9 October, 07:59 UTC — the first re-run against the
+baseline above.** 41 sources, 87 connections, 29 Modbus requests from 27
+sources: code 43 ×27 (25 sources) and code 17 ×2 (2 sources). Still no read
+(codes 1–4) and still no write (5, 6, 15, 16). A thirtieth record carries
+function code 0 and is not Modbus: its fourteen bytes have protocol identifier
+`0001` where Modbus/TCP requires `0000`, and the decoy answered nothing — a
+fixed probe thrown at port 502, labelled *other / unhandled* by query 15 and
+left out of the request count here. Arrivals ran 30, 28 and 28 a day on 7, 8
+and 9 October (the last to 07:59), from 15, 15 and 12 sources a day — steady,
+not climbing.
+
+Query 18: **8 of the 41 (19.5 %) had already been to the IT door**, against 2 of
+11 on the first morning. The shortest gap between a source's two doors is now
+under about seventy minutes (`0.0` days at one decimal) where the first morning's
+shortest was 4.1 days; the longest is 13.4 days. So the "days, not minutes"
+sentence above held for the first eleven and not for the next thirty: at least
+one visitor is sweeping both doors in one pass. Query 19: **14 of 41 returned**
+— six came twice, one three times, three four times, one six, two seven and one
+thirteen — against 1 of 11 on the first morning. Twenty-seven came once. The
+2-of-11 paragraph stands as the baseline it said it was; this is the second
+point, and the figure-freeze on 9 December takes the third.
 
 ## Next look
 
