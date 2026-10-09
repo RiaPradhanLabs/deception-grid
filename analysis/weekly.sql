@@ -233,6 +233,12 @@ SELECT event,
 -- 17 is Report Server ID, the older serial-line form of the same question.
 -- 17 was labelled 'other / unhandled' until 7 October 2026, when the first
 -- stranger to use it arrived; the count was right, the label was not.
+-- A frame is only counted here if it is Modbus/TCP at all: bytes 3-4 of the
+-- MBAP header (hex positions 5-8 of `request`) are the protocol identifier,
+-- which Modbus defines as 0000. On 8 October 2026 a 14-byte probe with
+-- protocol id 0001 and function byte 00 was logged as function_code 0 and sat
+-- in this table as a "request"; it was not one. Such frames are counted
+-- separately below so the Modbus request count stays a Modbus request count.
 SELECT function_code,
        CASE function_code
          WHEN  1 THEN 'read coils'
@@ -251,6 +257,21 @@ SELECT function_code,
        COUNT(DISTINCT src_ip)     AS sources
   FROM v_ot
  WHERE function_code IS NOT NULL
+   AND substr(request, 5, 4) = '0000'
+ GROUP BY 1, 2
+ ORDER BY 3 DESC;
+
+.print
+.print --- 15b. Frames on port 502 that were not Modbus/TCP (protocol id <> 0000) ---
+SELECT substr(request, 5, 4)      AS protocol_id,
+       length(request) / 2        AS bytes,
+       COUNT(*)                   AS frames,
+       COUNT(DISTINCT src_ip)     AS sources,
+       MIN(substr(ts, 1, 16))     AS first_seen,
+       MAX(substr(ts, 1, 16))     AS last_seen
+  FROM v_ot
+ WHERE function_code IS NOT NULL
+   AND substr(request, 5, 4) <> '0000'
  GROUP BY 1, 2
  ORDER BY 3 DESC;
 

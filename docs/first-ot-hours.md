@@ -99,10 +99,12 @@ sources: code 43 ×27 (25 sources) and code 17 ×2 (2 sources). Still no read
 (codes 1–4) and still no write (5, 6, 15, 16). A thirtieth record carries
 function code 0 and is not Modbus: its fourteen bytes have protocol identifier
 `0001` where Modbus/TCP requires `0000`, and the decoy answered nothing — a
-fixed probe thrown at port 502, labelled *other / unhandled* by query 15 and
-left out of the request count here. Arrivals ran 30, 28 and 28 a day on 7, 8
-and 9 October (the last to 07:59), from 15, 15 and 12 sources a day — steady,
-not climbing.
+fixed probe thrown at port 502. Query 15 counted it as a request until the same
+day, when it was given a protocol-id filter and a companion line, 15b, that
+counts such frames separately — so the Modbus request count stays a Modbus
+request count without anyone correcting it by hand. Arrivals ran 30, 28 and 28
+a day on 7, 8 and 9 October (the last to 07:59), from 15, 15 and 12 sources a
+day — steady, not climbing.
 
 Query 18: **8 of the 41 (19.5 %) had already been to the IT door**, against 2 of
 11 on the first morning. The shortest gap between a source's two doors is now
