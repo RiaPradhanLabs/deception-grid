@@ -25,6 +25,7 @@ None were found by reading totals. A wrong total looks exactly like a right one.
 | 7 | `features-tty.py` | laptop or sensor | Command timeline per TTY recording → one CSV. NOT keystroke timing; see below. |
 | 8 | `exclude-ips.txt.example` | — | The format for `exclude-ips.txt`, which is never committed. |
 | 9 | `overlap-test.py` | sensor | Read-only premise test for ML options 2 and 5: do sources share credential dictionaries? Prints aggregates only. |
+| 10 | `option4-telemetry.sql` | sensor | Read-only premise test for ML option 4: how much pre-login telemetry do successful sessions carry, and how many escalate? Aggregates only. |
 
 ---
 
@@ -237,6 +238,25 @@ planned, because it has a result either way.
 Tested before use against a synthetic database with two planted dictionaries
 (30 and 20 sources), 40 loners and 50 too-small sources: both dictionaries
 recovered exactly, loners untouched, the small ones dropped and counted.
+
+## option4-telemetry.sql
+
+Written on 9 October 2026 for the same reason as `overlap-test.py`: ML option 4
+(escalation prediction — from what a session does *before* its login succeeds,
+predict whether it goes on to run commands or move files) was parked behind an
+unmeasured question, how many sessions carry enough pre-login telemetry to
+predict from. Four read-only aggregates: sessions with a successful login by
+door port; the distribution of pre-login event counts per session, with how
+many carried a key-exchange record, a client version, or a failed attempt
+first; the escalation base rate by that count; and which pre-login event types
+exist at all. No address or credential is printed.
+
+```
+cd ~/analysis && sqlite3 -header -column decoy.sqlite < option4-telemetry.sql
+```
+
+The result and what it decided are recorded in the ML spin-off document and
+the project's check-in log, with the as-of time.
 
 ## Getting a file onto the sensor
 
