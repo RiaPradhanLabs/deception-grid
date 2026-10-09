@@ -294,20 +294,28 @@ clusters, broke the chain into pairs, left the unique sets alone and counted
 the gap. Credential pairs appear in the output because they are the finding;
 no address does.
 
-**Second version, the same day.** The first real run (10:59 UTC) found 25
-sources with sets of ~1,100 pairs "clustered" on a core of 14 — `root/12345`,
-`root/root`, `admin/admin`, the pairs every list carries. An absolute core
-lets universal credentials act as glue. So: pairs tried by more than 20 % of
-fingerprintable sources are removed before clustering and listed; the core
-must also be at least half of the smallest member's set; and `--shuffle N`
-re-runs the clustering in N random orders, reporting the Adjusted Rand Index
-against the largest-first run and how often the largest clusters stay intact.
-The synthetic test gained a glue trap — ten unrelated 300-pair lists sharing
-only the universal pairs — which the first rule clusters into one 90-source
-"campaign" (`--legacy` shows it) and the second leaves alone. One limitation,
-printed in the output as a self-check: a list shared by more than 20 % of all
-fingerprintable sources would itself be discarded as universal; the output
-shows the largest identical-set group beside that threshold.
+**Second and third versions, the same day.** The first real run (10:59 UTC)
+found 25 sources with sets of ~1,100 pairs "clustered" on a core of 14 —
+`root/12345`, `root/root`, `admin/admin`, the pairs every list carries. An
+absolute core lets common credentials act as glue. The second version removed
+pairs carried by more than 20 % of fingerprintable sources and made the core
+relative to the *smallest* member; its run (14:24 UTC) removed nothing — no
+pair here is carried by a fifth of the sources — and let one 20-pair list
+anchor twenty 1,100-pair dictionaries that contained it. The third version,
+which is the one in the file: glue pairs are those carried by more than 5 % of
+fingerprintable sources, removed before clustering and listed; the core must
+be at least ten pairs *and* at least half of the **median** member's set,
+candidate included; and `--shuffle N` re-runs the clustering in N random
+orders, reporting the Adjusted Rand Index against the largest-first run and
+how often each large cluster stays intact — which, on the second run, pointed
+at the false clusters by itself (the real campaigns were intact in 89–100 % of
+orders, the glue clusters in 38–70 %). The synthetic test carries a glue trap
+(ten unrelated 300-pair lists sharing only common pairs) and a small-anchor
+trap (one 20-pair list contained in ten unrelated big ones); the first rule
+fails the first (`--legacy` shows it), the second rule fails the second, the
+third passes both. Limitation, printed as a self-check: a list shared by more
+than the glue threshold's share of sources would itself be discarded; the
+output shows the largest identical-set group beside the threshold.
 
 ```
 cd ~/analysis && python3 fingerprints.py --shuffle 10

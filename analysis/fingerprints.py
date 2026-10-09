@@ -37,9 +37,13 @@ What it does:
      all fingerprintable sources would itself be discarded as universal. The
      output prints the largest identical-set group beside the threshold so the
      reader can see whether that is happening.
-  5. The core must be at least CORE pairs AND at least REL of the smallest
-     member's (reduced) set: a core of 14 against sets of 1,100 no longer
-     qualifies; 146 against 170 does.
+  5. The core must be at least CORE pairs AND at least REL of the MEDIAN
+     member's (reduced) set, the candidate included: a core of 14 against sets
+     of 1,100 no longer qualifies; 146 against 170 does. (The second run, 14:24
+     UTC, used the SMALLEST member instead, and one 20-pair list anchored
+     twenty 1,100-pair dictionaries that happened to contain it. Median fixes
+     that; a 5 % common-pair threshold replaces the 20 % one, which removed
+     nothing because no pair here is carried by a fifth of the sources.)
   6. --shuffle N re-runs the clustering in N random source orders and reports
      the Adjusted Rand Index of each against the largest-first run, plus how
      often the members of the largest clusters stay together -- the
@@ -64,7 +68,7 @@ ap.add_argument("--min", type=int, default=5, help="distinct pairs needed to be 
 ap.add_argument("--core", type=int, default=10, help="pairs a cluster's shared core must keep")
 ap.add_argument("--twin", type=float, default=0.9, help="Jaccard at or above which two sources are twins")
 ap.add_argument("--rel", type=float, default=0.5, help="core must also be >= this fraction of the smallest member's set")
-ap.add_argument("--common", type=float, default=0.2, help="pairs tried by more than this fraction of fingerprintable sources are universal and ignored")
+ap.add_argument("--common", type=float, default=0.05, help="pairs tried by more than this fraction of fingerprintable sources are common glue and ignored")
 ap.add_argument("--shuffle", type=int, default=0, help="re-run the clustering in N random orders and report stability")
 ap.add_argument("--legacy", action="store_true", help="first-version rule: absolute core only, universal pairs kept")
 ap.add_argument("--top", type=int, default=8, help="clusters to describe")
@@ -113,15 +117,15 @@ if args.legacy:
 red = {ip: (s_ - universal) for ip, s_ in fp.items()}
 emptied = sum(1 for s_ in red.values() if len(s_) == 0)
 print()
-print("universal pairs (tried by >%.0f%% of fingerprintable sources; ignored for clustering)"
+print("common glue pairs (tried by >%.0f%% of fingerprintable sources; ignored for clustering)"
       % (100 * args.common))
 print("  count                          %d" % len(universal))
 if universal:
     top_u = sorted(universal, key=lambda pr: -carriers[pr])[:8]
     print("  most widely carried            %s"
           % "  ".join("%s/%s(%d src)" % (u, p, carriers[(u, p)]) for u, p in top_u))
-    print("  sources left with no pairs     %d   (their whole list was universal)" % emptied)
-print("  self-check: a list shared by more than %d sources would itself count as universal;"
+    print("  sources left with no pairs     %d   (their whole list was glue)" % emptied)
+print("  self-check: a list shared by more than %d sources would itself count as glue;"
       % int(args.common * len(fp)))
 
 # --- twins ------------------------------------------------------------------
@@ -157,9 +161,9 @@ print("  near-identical (Jaccard>=%.1f)  %d sources   (%.1f%% of fingerprintable
       % (args.twin, len(has_twin), 100.0 * len(has_twin) / max(1, len(fp))))
 print("  self-check continued: the largest identical-set group is %d sources, so %s"
       % (max((len(v) for v in identical_groups), default=0),
-         "no observed list is at risk of being discarded as universal"
+         "no observed list is at risk of being discarded as glue"
          if max((len(v) for v in identical_groups), default=0) <= args.common * len(fp)
-         else "RAISE --common: a real shared list is being discarded as universal"))
+         else "RAISE --common: a real shared list is being discarded as glue"))
 
 # --- common-core clusters ---------------------------------------------------
 def cluster(order):
@@ -172,15 +176,22 @@ def cluster(order):
         best, best_core = None, None
         for c in out:
             core = c["core"] & s_
-            need = args.core if args.legacy else max(args.core, args.rel * min(c["minsize"], len(s_)))
+            if args.legacy:
+                need = args.core
+            else:
+                # relative to the MEDIAN member size with the candidate included:
+                # one small list cannot anchor a cluster of big dictionaries, and
+                # one big dictionary cannot be glued onto a cluster of small lists.
+                sizes_ = sorted(c["sizes"] + [len(s_)])
+                need = max(args.core, args.rel * sizes_[len(sizes_) // 2])
             if len(core) >= need and (best_core is None or len(core) > len(best_core)):
                 best, best_core = c, core
         if best is None:
-            out.append({"core": set(s_), "members": [ip], "minsize": len(s_)})
+            out.append({"core": set(s_), "members": [ip], "sizes": [len(s_)]})
         else:
             best["core"] = best_core
             best["members"].append(ip)
-            best["minsize"] = min(best["minsize"], len(s_))
+            best["sizes"].append(len(s_))
     return out
 
 clusters = cluster(ips)   # largest set first
@@ -199,7 +210,7 @@ def dist(values):
 
 print()
 print("common-core clusters (core >= %d pairs%s, kept as the cluster grows)"
-      % (args.core, "" if args.legacy else " and >= %.0f%% of the smallest member's set" % (100 * args.rel)))
+      % (args.core, "" if args.legacy else " and >= %.0f%% of the median member's set" % (100 * args.rel)))
 print("  clusters with >=2 sources      %d   covering %d of %d fingerprintable sources (%.1f%%)"
       % (len(multi), in_multi, len(fp), 100.0 * in_multi / max(1, len(fp))))
 print("  sources in no cluster          %d   (fingerprintable, but share <%d pairs with any cluster)"
