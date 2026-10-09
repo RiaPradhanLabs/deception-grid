@@ -27,7 +27,7 @@ None were found by reading totals. A wrong total looks exactly like a right one.
 | 9 | `overlap-test.py` | sensor | Read-only premise test for ML options 2 and 5: do sources share credential dictionaries? Prints aggregates only. |
 | 10 | `option4-telemetry.sql` | sensor | Read-only premise test for ML option 4: how much pre-login telemetry do successful sessions carry, and how many escalate? Aggregates only. |
 | 11 | `option4-clients.sql` | sensor | M3, the last gate on option 4: do the SSH client version strings and HASSH fingerprints vary across the sessions that got in, and does escalation vary with them? Aggregates only. |
-| 12 | `fingerprints.py` | sensor | ML option 2, first pass: credential sets as campaign fingerprints — denominator, twins, common-core clusters. Prints credential pairs and counts, never an address. |
+| 12 | `fingerprints.py` | sensor | ML option 2: credential sets as campaign fingerprints — denominator, universal pairs, twins, relative common-core clusters, `--shuffle` order-independence. Prints credential pairs and counts, never an address. |
 
 ---
 
@@ -293,6 +293,25 @@ unique sets and thirty under-sized sources: it found the two lists as two
 clusters, broke the chain into pairs, left the unique sets alone and counted
 the gap. Credential pairs appear in the output because they are the finding;
 no address does.
+
+**Second version, the same day.** The first real run (10:59 UTC) found 25
+sources with sets of ~1,100 pairs "clustered" on a core of 14 — `root/12345`,
+`root/root`, `admin/admin`, the pairs every list carries. An absolute core
+lets universal credentials act as glue. So: pairs tried by more than 20 % of
+fingerprintable sources are removed before clustering and listed; the core
+must also be at least half of the smallest member's set; and `--shuffle N`
+re-runs the clustering in N random orders, reporting the Adjusted Rand Index
+against the largest-first run and how often the largest clusters stay intact.
+The synthetic test gained a glue trap — ten unrelated 300-pair lists sharing
+only the universal pairs — which the first rule clusters into one 90-source
+"campaign" (`--legacy` shows it) and the second leaves alone. One limitation,
+printed in the output as a self-check: a list shared by more than 20 % of all
+fingerprintable sources would itself be discarded as universal; the output
+shows the largest identical-set group beside that threshold.
+
+```
+cd ~/analysis && python3 fingerprints.py --shuffle 10
+```
 
 ## Getting a file onto the sensor
 
