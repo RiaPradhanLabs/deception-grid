@@ -28,6 +28,7 @@ None were found by reading totals. A wrong total looks exactly like a right one.
 | 10 | `option4-telemetry.sql` | sensor | Read-only premise test for ML option 4: how much pre-login telemetry do successful sessions carry, and how many escalate? Aggregates only. |
 | 11 | `option4-clients.sql` | sensor | M3, the last gate on option 4: do the SSH client version strings and HASSH fingerprints vary across the sessions that got in, and does escalation vary with them? Aggregates only. |
 | 12 | `fingerprints.py` | sensor | ML option 2: credential sets as campaign fingerprints — denominator, glue pairs, twins, relative common-core clusters, `--shuffle` order-independence, `--clients` (which SSH tool runs each campaign), `--success` (which campaigns get in), `--timeline` (sources per day), `--csv` (one anonymised row per cluster). Prints credential pairs, client strings and counts, never an address. |
+| 13 | `communities.py` | laptop or sensor | ML option 5: source–credential graph communities (Jaccard ≥ 0.3 edges, Louvain) on the same reduced sets as `fingerprints.py`, with the ARI and a cross-tab against option 2's clusters — the second method that checks the first. `--seeds` for order-dependence, `--csv` for one anonymised row per community. Never prints an address. |
 
 ---
 
@@ -339,9 +340,60 @@ checked.
 
 ```
 cd ~/analysis && python3 fingerprints.py --shuffle 10 --clients --success --timeline --csv campaigns-$(date -u +%Y-%m-%dT%H%MZ).csv
-``` Tested on a synthetic database with one
-planted campaign on a single client (half its sources succeeding) and one
-split across two clients (none succeeding).
+```
+
+Tested on a synthetic database with one planted campaign on a single client
+(half its sources succeeding) and one split across two clients (none
+succeeding).
+
+## communities.py
+
+ML option 5's first pass, written on 11 October 2026: the **second method** on
+the same data, so that option 2's campaigns can be checked by something other
+than option 2's own self-checks. Read-only, standard library, runs on the
+laptop against a snapshot or on the sensor. It prepares the data exactly as
+`fingerprints.py` does — same denominator, same glue removal, same defaults —
+then builds a graph: one node per source with a non-empty reduced set, an edge
+between two sources whose reduced sets have Jaccard ≥ 0.3 (the threshold
+`overlap-test.py` used), weighted by that Jaccard. Sources with no edge are
+isolates, counted and left alone. Communities are found by **Louvain**
+modularity optimisation, implemented in the file (local moves, aggregate,
+repeat). `--seeds N` runs it in N shuffled node orders, keeps the partition
+with the highest modularity and reports the Adjusted Rand Index of the others
+against it — Louvain's order-dependence, measured as `--shuffle` measures
+option 2's.
+
+```
+python3 communities.py --db decoy-2026-10-09T0918Z.sqlite --seeds 10
+python3 communities.py --db decoy-2026-10-09T0918Z.sqlite --seeds 10 --csv communities-<stamp>.csv
+```
+
+The output then runs option 2's common-core rule (copied from
+`fingerprints.py` v5 — that script runs on import, so it cannot be imported;
+keep the copy in step) on the same reduced sets and prints the **agreement**:
+the ARI between the two labellings over all nodes and over the sources both
+methods cluster; for each large option-2 cluster, how many communities its
+members are spread over and the largest share in one; for each large
+community, which option-2 clusters it merges and how many sources option 2 had
+left unclustered. Each large community is described by its *core* (pairs in
+every member's set — which can be empty, and the output says so: "a
+neighbourhood, not one list") beside its *half* (pairs in at least half the
+members), its median set size, mean internal Jaccard, day span and doors. The
+connected-component sizes are printed too, with how Louvain cuts the largest
+one — the 41-source chain of 6 October is a component, not a campaign, and
+this shows what a community method makes of it. `--csv PATH` writes one row
+per community with **no address column** and refuses to overwrite.
+
+Tested on three synthetic databases before any real run: the option-2 test
+database (planted lists A and B, a sliding chain, unique sets, a glue trap) —
+A and B recovered exactly, the chain kept as one 12-source community with an
+empty core where option 2 had cut it into pairs, ARI 0.874 against option 2;
+two disconnected identical-set cliques — modularity 0.500, the textbook value;
+and a 30-source sliding chain beside the cliques — Louvain cut the chain into
+two halves of 15, stable over ten orders, which is what modularity does to a
+band graph and why the core column exists. Known limits, printed at the end:
+modularity's resolution limit can merge small campaigns inside a dense
+neighbourhood, and a chain can be cut anywhere.
 
 ## Getting a file onto the sensor
 
