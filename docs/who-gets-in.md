@@ -98,6 +98,35 @@ campaign among the eight largest — the Mirai list, `root/xmhdipc`,
 `root/juantech`, `root/888888`, eight sources — accounts for **1,035 of the
 3,871 successful logins** on the sensor.
 
+**Measured again on 11 October by a second method (16:36 UTC,
+`analysis/communities.py --seeds 10`, commit `ac81eaf`, run on the laptop
+against the frozen snapshot of 9 October 09:18 UTC).** The same 937 sources,
+with the same 52 glue pairs set aside, were joined into a graph (an edge where
+two lists overlap by at least 30 %) and cut into communities by modularity
+instead of by a shared core. Where both methods speak, they agree: over the 325
+sources the common-core rule clusters, the two labellings have an Adjusted Rand
+Index of **0.865**, every one of the eight largest campaigns above sits whole
+inside one community — the nineteen-source dictionary, the fifteen-source
+`admin/1111` list, the eleven `admin/Admin@20xx` sources, all 100 % — and not
+one source is clustered by the core rule alone. The disagreement is the 257
+sources the core rule *refuses*: the graph's two largest communities, 119 and 38
+sources, have **no credential pair in common** (median lists of ten and four
+pairs, pairwise overlap 0.35) — the 41-source chain of 6 October, grown to a
+166-source component — and a community method calls each one thing. Over all
+937 sources the ARI is therefore **0.129**. Both figures belong together: the
+first says the campaigns are real, the second says most of the graph is not
+campaigns.
+
+The second method also found something the first could not. One community of
+**25 sources with identical seven-"pair" lists** is not credentials at all:
+`GET / HTTP/1.0`, `Call-ID: 50000` / `CSeq: 42 OPTIONS`, `From: <sip:nm@nm>` /
+`To: <sip:nm2@nm2>`, `Max-Forwards: 70` / `Content-Length: 0` — HTTP and SIP
+OPTIONS probes sent to the telnet port, read by Cowrie line by line as a
+username and a password. The core rule's ten-pair floor hid them. They sit in
+every password-attempt total and in the 1,493 "sources with a login attempt" as
+of the snapshot; whether they become a seventh artefact rule is an open
+decision recorded in the project checklist, not made here.
+
 One caveat travels with every "got in" figure in this note: **the decoy
 decides what succeeds.** Cowrie's `userdb.txt` accepts broadly by design, so a
 long dictionary logs in because the list is long, not because the attacker is

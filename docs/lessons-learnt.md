@@ -983,3 +983,52 @@ and not the finding. Both pictures are kept there, dated.
 (IT 3,020, OT 41, 8 shared), 111,571 real password attempts, 3,871 successful
 logins from 697 sources, 118,677 arrivals; 154 files held, 90 distinct hashes
 recorded in the log; outbound fetches that succeeded since the block: 0.*
+
+# Addendum — 11 October 2026
+
+A Sunday with nothing due. One unscheduled check-in and the first run of a
+second clustering method; three lessons.
+
+**One agreement figure is a half-truth.** `communities.py` (ML option 5, graph
+communities by modularity) was run against the same data as `fingerprints.py`
+(option 2, common-core clusters) to see whether an independent method finds the
+same campaigns. Over the 325 sources the core rule clusters, the Adjusted Rand
+Index is 0.865 and every one of the eight largest campaigns is intact — the
+confirmation the write-up needed. Over all 937 sources it is 0.129, because the
+graph method also joins 257 sources the core rule refuses — two communities of
+119 and 38 sources with no credential pair in common, the 6 October chain grown
+to a 166-source component. Either figure alone misleads: 0.865 would say the
+methods agree, 0.129 that they do not, and the truth is that they agree about
+what a campaign is and disagree about what to do with the rest. Every document
+that quotes one now quotes both, and `figures.sh`'s map says so. The prediction
+before the run was "ARI between 0.6 and 0.8"; it is kept, because the miss is
+what taught the lesson.
+
+**A second method finds what the first method's own threshold hides.** The
+core rule needs ten shared pairs. One community of 25 sources shares exactly
+seven — and they are not credentials: `GET / HTTP/1.0`, `Call-ID: 50000` /
+`CSeq: 42 OPTIONS`, `From: <sip:nm@nm>` / `To: <sip:nm2@nm2>`, HTTP and SIP
+OPTIONS probes aimed at the telnet port and read by Cowrie as usernames and
+passwords. They have been inside every password-attempt total and in the
+"sources with a login attempt" count since the first weekend; six versions of
+the artefact rule, written to catch console words and escaped bytes, had no
+reason to look for them. The self-checks of one method (`--shuffle`, the
+sensitivity run) could not have found this, because they only ask whether the
+method agrees with itself. Whether the probes become a seventh artefact rule is
+a decision for the next working session, recorded as an open item; the figures
+in `who-gets-in.md` and the decks are unaffected tonight because none of them
+counts these 25 as having got in.
+
+**A scheduled prompt can carry a command nobody has run.** The 19 November
+acquisition prompt says `[PS] python3 features-tty.py` for the TTY timeline on
+the laptop. The laptop has no `python3`: Windows answered with the Microsoft
+Store. It has `python` (3.14.8) and `py -3`. Found tonight only because option 5
+was run on the laptop five weeks early; the prompt is corrected, and the lesson
+from 5 October — read a prompt back after writing it — gets a clause: *and run
+its commands once on the machine they name.*
+
+*Figures in this addendum are from the frozen snapshot of 9 October 2026, 09:18
+UTC. The unscheduled check-in at 16:23 UTC read 3,524 IT sources, 775,620
+events, 262 files held and 76 OT sources straight off the logs (`decoy-status`,
+which is not the figure to quote; `ingest.py` is). 108 of the 262 files arrived
+in the 58 hours since Friday's check-in, against 154 in the first fourteen days.*

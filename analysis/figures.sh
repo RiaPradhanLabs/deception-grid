@@ -144,9 +144,14 @@ cat <<'MAP'
       both dates. The 7 October paragraph is the baseline, not the finding.
 
   docs/who-gets-in.md                  (option4-telemetry.sql, option4-clients.sql,
-                                        fingerprints.py --shuffle 10 --clients --success)
+                                        fingerprints.py --shuffle 10 --clients --success,
+                                        communities.py --seeds 10 -- the last one runs
+                                        on the LAPTOP against the frozen snapshot)
     - sessions that logged in, by door; pre-login telemetry; escalation by client
     - the client version strings and HASSH counts; the campaigns table
+    - the second-method paragraph: BOTH Adjusted Rand Indices, always together
+      (over the sources both methods cluster, and over all nodes), and the
+      25-source HTTP/SIP probe community
     - CAVEAT TO KEEP: "got in" is decided by Cowrie's userdb.txt as much as by
       the attacker; counts are sessions, not sources; glue threshold and core
       rule stated with every cluster figure.
