@@ -115,7 +115,11 @@ pairs, pairwise overlap 0.35) — the 41-source chain of 6 October, grown to a
 166-source component — and a community method calls each one thing. Over all
 937 sources the ARI is therefore **0.129**. Both figures belong together: the
 first says the campaigns are real, the second says most of the graph is not
-campaigns.
+campaigns. Measured again on 13 October (`--sweep`, `--lpa`, commit `b0f37b7`):
+the 0.865 holds at every Louvain resolution from 0.5 to 4, and a second
+community method, label propagation, gives 0.870 — the campaigns depend on
+neither the parameter nor the method, and only the core-less neighbourhoods
+move when either changes.
 
 The second method also found something the first could not. One community of
 **25 sources with identical seven-"pair" lists** is not credentials at all:

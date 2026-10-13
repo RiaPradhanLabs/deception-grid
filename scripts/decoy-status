@@ -113,8 +113,28 @@ else
 fi
 
 if [ -d "$DOWNLOADS" ]; then
-  n=$(find "$DOWNLOADS" -maxdepth 1 -type f ! -name '.gitignore' | wc -l)
-  echo "    captured   $n files held (fetched, pushed over scp, and redirections)"
+  # Three lines since 13 October 2026, one before. On 11 October this printed
+  # "262 files held"; on the 13th, "1,359" -- and 1,191 of them were ONE BYTE
+  # each, a single newline, named redir_<hex>: Cowrie's capture of a shell
+  # redirection, one per `/bin/busybox echo -ne "\x.." > .s` write of a
+  # Mirai-family telnet loader that arrived on 10 October and ran about 1,440
+  # sessions a day by the 12th. A single count had become a loader-session
+  # counter and nobody could tell from this screen. So: files Cowrie named by
+  # their content hash (fetched over the network, or pushed over scp), the
+  # redirect captures, and the number of DISTINCT contents across all of them,
+  # which is the only figure that may ever be quoted as a sample count
+  # (analysis/figures.sh says the same; query 13 gives the four kinds).
+  by_hash=$(find "$DOWNLOADS" -maxdepth 1 -type f -regextype posix-extended -regex '.*/[0-9a-f]{64}' | wc -l)
+  redir=$(find "$DOWNLOADS" -maxdepth 1 -type f -name 'redir_*' | wc -l)
+  other=$(find "$DOWNLOADS" -maxdepth 1 -type f ! -name '.gitignore' ! -name 'redir_*' -regextype posix-extended ! -regex '.*/[0-9a-f]{64}' | wc -l)
+  distinct=$(find "$DOWNLOADS" -maxdepth 1 -type f ! -name '.gitignore' -exec sha256sum {} + 2>/dev/null | awk '{print $1}' | sort -u | wc -l)
+  echo "    captured   $by_hash files named by content hash (fetched, or pushed over scp)"
+  if [ "$other" -gt 0 ]; then
+    echo "               $redir shell-redirect captures (redir_*), $other other"
+  else
+    echo "               $redir shell-redirect captures (redir_*)"
+  fi
+  echo "               $distinct distinct contents across all of them  <- the only sample count"
 fi
 
 # ======================================================================
