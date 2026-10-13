@@ -59,6 +59,24 @@ ESCAPED_BYTE = re.compile(r'\\x[0-9a-fA-F]{2}')
 CONSOLE_WORDS = {'enable', 'system', 'shell', 'sh', 'linuxshell',
                  'su', 'exit', 'quit', 'help'}
 
+# Version seven, 13 October 2026. A username that is a PROTOCOL LINE: an HTTP or
+# SIP request line ("GET / HTTP/1.0", "OPTIONS sip:nm SIP/2.0") or a header
+# ("Call-ID: 50000", "Accept-Encoding: gzip"). Scanners that speak HTTP or SIP
+# to port 23 are read by Cowrie's telnet login line by line, and every line
+# becomes a username/password pair with no escape in it -- which is why six
+# versions of the rule above never saw them. Found on 11 October 2026 by the
+# option-5 community pass (analysis/communities.py), which clustered 25 sources
+# on an identical seven-"pair" list that turned out to be a SIP OPTIONS probe.
+# Every shape here was read from the stored rows on 13 October before this was
+# written; nothing in it is imagined. The USERNAME alone is tested: it is the
+# first line Cowrie read, and no credential is "Token: value" with a space or
+# "METHOD target HTTP/1.x".
+PROTOCOL_LINE = re.compile(
+    r'^(?:'
+    r'[A-Z]{3,8} \S+ (?:HTTP/\d\.\d|SIP/2\.0)'   # request line
+    r'|[A-Za-z][A-Za-z0-9-]{1,40}: '                # header: Name, colon, space
+    r')')
+
 
 def decode_escapes(value):
     """Turn the literal \\xNN escape text back into the characters it stands for.
@@ -410,7 +428,7 @@ def load_address_history(path):
 def exclusion_reason(event, own):
     """Why this row must not count, or None if it counts.
 
-    Four reasons, and no others:
+    Five reasons, and no others:
 
       loopback          our own local testing, from 127.0.0.1.
       analyst           a session from one of our own addresses.
@@ -419,10 +437,15 @@ def exclusion_reason(event, own):
                         input and records it as a username/password pair.
       artefact-binary   a login row whose fields are non-printable bytes with
                         no readable content at all.
+      artefact-protocol a login row whose username is an HTTP or SIP request
+                        line or header -- a scanner speaking the wrong protocol
+                        to the telnet port, read line by line as logins.
+                        Added 13 October 2026 as version seven; see below.
 
-    Anything else counts. If a fifth reason is ever added, it goes here and it
+    Anything else counts. If a sixth reason is ever added, it goes here and it
     goes in the documentation, because the exclusion list is part of the result
-    and not an implementation detail.
+    and not an implementation detail. (This paragraph said "fifth" until the
+    fifth arrived.)
 
     The artefact rule took SIX attempts and the failures are the argument for
     how it is written now. Each one is kept below, because every version was
@@ -464,6 +487,24 @@ def exclusion_reason(event, own):
     stayed excluded, nothing moved the other way. `--selftest` now pins every
     case listed in this docstring so that version seven cannot quietly bring
     one of them back.
+
+    Version seven, 13 October 2026, is `PROTOCOL_LINE` above and the first test
+    in the login branch below. It was not found by reading excluded rows -- it
+    could not have been, because the rows it concerns carry no escape and were
+    never candidates. It was found by a different method altogether: the
+    option-5 clustering pass of 11 October grouped 25 sources on an identical
+    list of seven "credential pairs" that read `GET / HTTP/1.0`, `Call-ID:
+    50000` / `CSeq: 42 OPTIONS`, `From: <sip:nm@nm>;tag=root` / `To:
+    <sip:nm2@nm2>` -- a SIP OPTIONS scanner and some HTTP probes, aimed at
+    port 23 and read by the telnet login as usernames and passwords. The rows
+    were then read on the sensor (33 SIP sessions from 32 sources; HTTP probes
+    from about 20 more, one of them walking a Node-RED API) and the two shapes
+    they all share -- request line, or header -- became the rule. Tested on
+    the USERNAME only. Stated limitation: the blank line that ends a header
+    block arrives as an empty/empty pair, which no per-row rule can tell from a
+    deliberate empty probe, so one such row per probe session still counts.
+    `--preview` runs the re-derivation without writing, so the moved rows can
+    be read before they move; the real run prints the same table.
     """
     src = event.get('src_ip')
     if src == '127.0.0.1':
@@ -481,6 +522,10 @@ def exclusion_reason(event, own):
         return 'analyst'
     if event.get('eventid') in LOGIN_EVENTS:
         user, pw = event.get('username'), event.get('password')
+        # Version seven: a protocol line in the username field. Tested before
+        # the escape branch because these rows carry no escape at all.
+        if PROTOCOL_LINE.match(user or ''):
+            return 'artefact-protocol'
         su, sp = printable_part(user), printable_part(pw)
         # Everything below is INSIDE this branch on purpose. Only a field that
         # carries an escape is a candidate; a credential containing an ordinary
@@ -576,8 +621,13 @@ DERIVED = ('ts', 'eventid', 'sensor', 'session', 'src_ip', 'src_port',
            'dst_port', 'username', 'password', 'input', 'message', 'excluded')
 
 
-def rederive(db, own):
+def rederive(db, own, dry_run=False):
     """Recompute EVERY derived column for every row, from `raw`.
+
+    `dry_run` (the `--preview` flag) computes and prints exactly what the real
+    pass would change, and writes nothing. Added 13 October 2026 with rule
+    version seven so that the rows a new rule moves can be read BEFORE they
+    move; the real run then prints the same table, and the two must agree.
 
     This exists because of a bug found twice on 29 September 2026, the second
     time as the general case of the first.
@@ -613,6 +663,8 @@ def rederive(db, own):
     columns = ', '.join(DERIVED)
     changed_cols = {}
     transitions = {}
+    moved_pairs = {}      # (old reason, new reason, username, password) -> rows
+    moved_sources = {}    # (old reason, new reason) -> set of src_ip
     updates = []
 
     for row in db.execute('SELECT id, raw, %s FROM events' % columns):
@@ -651,24 +703,41 @@ def rederive(db, own):
             key = '%s -> %s' % (current['excluded'] or '(counts)',
                                 fresh['excluded'] or '(counts)')
             transitions[key] = transitions.get(key, 0) + 1
+            if fresh['eventid'] in LOGIN_EVENTS:
+                pk = (key, fresh['username'], fresh['password'])
+                moved_pairs[pk] = moved_pairs.get(pk, 0) + 1
+                moved_sources.setdefault(key, set()).add(fresh['src_ip'])
         updates.append(tuple(fresh[c] for c in DERIVED) + (row_id,))
 
-    if updates:
+    if updates and not dry_run:
         db.executemany(
             'UPDATE events SET %s WHERE id = ?'
             % ', '.join('%s = ?' % c for c in DERIVED), updates)
         db.commit()
 
     print()
-    print('=== re-derived from raw against the current code ===')
+    if dry_run:
+        print('=== PREVIEW: what re-deriving against the current code WOULD change (nothing written) ===')
+    else:
+        print('=== re-derived from raw against the current code ===')
     if not updates:
         print('    nothing changed -- the database already matches the code')
     else:
-        print('    %d rows updated' % len(updates))
+        print('    %d rows %s' % (len(updates), 'would change' if dry_run else 'updated'))
         for c, n in sorted(changed_cols.items(), key=lambda kv: -kv[1]):
             print('      column %-10s %6d rows' % (c, n))
         for key, n in sorted(transitions.items(), key=lambda kv: -kv[1]):
-            print('      %-44s %6d' % (key, n))
+            srcs = len(moved_sources.get(key, ()))
+            print('      %-44s %6d%s' % (key, n,
+                                        '   (%d distinct sources)' % srcs if srcs else ''))
+        if moved_pairs:
+            print('    login rows that change reason, by pair (read these; '
+                  'this table is the argument for the rule):')
+            shown = sorted(moved_pairs.items(), key=lambda kv: -kv[1])
+            for (key, u, pw), n in shown[:40]:
+                print('      %-28s %-36r %-30r %5d' % (key.split(' -> ')[1], u, pw, n))
+            if len(shown) > 40:
+                print('      ... and %d more pairs' % (len(shown) - 40))
     return len(updates)
 
 
@@ -937,6 +1006,30 @@ def selftest():
          'artefact-binary',
          'a readable username does not rescue a password that was non-empty '
          'and decodes to nothing'),
+        # version seven, 13 October 2026: protocol lines read as logins
+        ('GET / HTTP/1.0', '', 'artefact-protocol',
+         'version seven: an HTTP request line as the username, blank password'),
+        ('GET / HTTP/1.1', 'Host: 198.51.100.7:23', 'artefact-protocol',
+         'version seven: request line, and the Host header as the password'),
+        ('OPTIONS sip:nm SIP/2.0', 'Via: SIP/2.0/TCP nm;branch=foo',
+         'artefact-protocol',
+         'version seven: the SIP OPTIONS scanner, first line of 33 sessions'),
+        ('Call-ID: 50000', 'CSeq: 42 OPTIONS', 'artefact-protocol',
+         'version seven: a header line as the username'),
+        ('Accept-Encoding: gzip', '', 'artefact-protocol',
+         'version seven: a lone header, 18 sources'),
+        ('root', 'Host: example', None,
+         'version seven: a header in the PASSWORD alone does not make an '
+         'artefact -- only the username is tested'),
+        ('admin:admin', 'admin', None,
+         'version seven: colon without a space is a credential, not a header'),
+        ('user name', 'secret', None,
+         'version seven: a space alone is not a protocol line'),
+        ('', '', None,
+         'version seven, stated limitation: the blank line after a header '
+         'block is an empty/empty pair and still counts'),
+        ('GET', 'POST', None,
+         'version seven: a bare method word is a word, not a request line'),
     ]
 
     failures = 0
@@ -981,7 +1074,25 @@ def selftest():
     return 0
 
 
+def preview():
+    """`--preview`: re-derive against the current code, write nothing.
+
+    Reads the database as it stands (no sudo, no log files) and prints what the
+    next real run would change, pair by pair. Run it before deploying a rule
+    change; then run the rule for real and check the two tables agree.
+    """
+    unbounded = load_own_addresses(EXCLUDES)
+    windows, _malformed, _observations = load_address_history(HISTORY)
+    own = OwnAddresses(unbounded, windows)
+    db = sqlite3.connect('file:%s?mode=ro' % DB, uri=True)
+    n = rederive(db, own, dry_run=True)
+    db.close()
+    return 0 if n >= 0 else 1
+
+
 if __name__ == '__main__':
     if '--selftest' in sys.argv[1:]:
         sys.exit(selftest())
+    if '--preview' in sys.argv[1:]:
+        sys.exit(preview())
     main()
