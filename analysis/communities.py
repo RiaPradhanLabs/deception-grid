@@ -46,10 +46,20 @@ What it does:
      large community its all-member core (which may be empty -- stated) beside
      the pairs carried by at least half its members.
 
+  6. --sweep R1,R2,... (13 October 2026) re-runs Louvain at each RESOLUTION:
+     below 1 it merges, above 1 it splits. The plan said the default silently
+     decides how many communities you find; the sweep shows how much, with the
+     ARI against option 2 and against the resolution-1 partition at each value.
+  7. --lpa (13 October 2026) runs LABEL PROPAGATION on the same graph as the
+     comparison method the plan asked for -- no objective function, each node
+     takes the weighted majority label of its neighbours until nothing changes;
+     ties broken at random, --seeds orders -- and reports its agreement with
+     Louvain and with option 2.
 What it prints: graph size, isolates, components; community count, sizes,
                 modularity; the largest communities with core sizes and top
                 pairs; agreement with option 2 (ARI, cross-tab); stability over
-                seeds. Credential pairs are printed (they are the finding);
+                seeds; the resolution sweep and the label-propagation
+                comparison when asked. Credential pairs are printed (they are the finding);
                 addresses never are.
 What it never does: print an address; write anything without --csv; connect to
                     anything.
@@ -72,6 +82,9 @@ ap.add_argument("--core", type=int, default=10, help="option-2 rule: pairs a clu
 ap.add_argument("--rel", type=float, default=0.5, help="option-2 rule: core >= this fraction of the median member's set")
 ap.add_argument("--top", type=int, default=8, help="communities and clusters to describe")
 ap.add_argument("--csv", metavar="PATH", help="one anonymised row per community (no address column); refuses to overwrite")
+ap.add_argument("--resolution", type=float, default=1.0, help="Louvain resolution for the main run (1.0 = standard modularity)")
+ap.add_argument("--sweep", metavar="R,R,...", help="also run Louvain at these resolutions and tabulate the result")
+ap.add_argument("--lpa", action="store_true", help="also run label propagation on the same graph and compare")
 args = ap.parse_args()
 
 if args.csv and os.path.exists(args.csv):
@@ -175,9 +188,11 @@ print("  connected components (>=2)     %d   covering %d nodes; largest %d"
       % (len(comp_multi), sum(comp_multi), comp_multi[0] if comp_multi else 0))
 
 # --- Louvain ------------------------------------------------------------------
-def louvain(adj_, n, rnd):
+def louvain(adj_, n, rnd, gamma=1.0):
     """Louvain on an undirected weighted graph. adj_[i][j] = weight (j != i).
-    Returns a list: community label per original node."""
+    Returns a list: community label per original node. `gamma` is the
+    resolution: the gain of joining a community is k_in - gamma * tot * k / 2m,
+    so gamma < 1 favours fewer, larger communities and gamma > 1 more, smaller."""
     # level-0 graph: every node its own community
     graph = {i: dict(adj_.get(i, {})) for i in range(n)}      # may hold self-loops at later levels
     membership = list(range(n))                                 # original node -> current super-node
@@ -210,9 +225,9 @@ def louvain(adj_, n, rnd):
                         w_to[comm[j]] += w
                 # remove i from its community
                 tot[ci] -= ki
-                best_c, best_gain = ci, w_to.get(ci, 0.0) - tot[ci] * ki / two_m
+                best_c, best_gain = ci, w_to.get(ci, 0.0) - gamma * tot[ci] * ki / two_m
                 for c, w in w_to.items():
-                    gain = w - tot[c] * ki / two_m
+                    gain = w - gamma * tot[c] * ki / two_m
                     if gain > best_gain + 1e-12:
                         best_c, best_gain = c, gain
                 tot[best_c] += ki
@@ -275,7 +290,7 @@ def ari(la, lb):
 
 runs = []
 for seed in range(max(1, args.seeds)):
-    lab = louvain(adj, len(nodes), random.Random(1000 + seed))
+    lab = louvain(adj, len(nodes), random.Random(1000 + seed), args.resolution)
     runs.append((modularity(lab), seed, lab))
 runs.sort(key=lambda r: -r[0])
 best_q, best_seed, labels = runs[0]
@@ -300,8 +315,8 @@ def median(v):
     return v[len(v) // 2] if v else 0
 
 print()
-print("communities (Louvain, best of %d order%s: seed %d, modularity %.3f)"
-      % (len(runs), "" if len(runs) == 1 else "s", best_seed, best_q))
+print("communities (Louvain at resolution %.2f, best of %d order%s: seed %d, modularity %.3f)"
+      % (args.resolution, len(runs), "" if len(runs) == 1 else "s", best_seed, best_q))
 print("  communities with >=2 sources   %d   covering %d of %d nodes (%.1f%%; %.1f%% of fingerprintable)"
       % (len(multi_c), in_multi, len(nodes), 100.0 * in_multi / max(1, len(nodes)),
          100.0 * in_multi / max(1, len(fp))))
@@ -427,6 +442,106 @@ if len(runs) > 1:
         shares.sort()
         together.append("#%d:%.0f%%" % (r, 100 * shares[len(shares) // 2]))
     print("  largest communities intact     %s" % "  ".join(together))
+
+# --- resolution sweep ------------------------------------------------------------
+def summarise(lab_list, rnd_seeds=None):
+    """Community count (>=2), coverage, largest, modularity for a label list."""
+    groups = defaultdict(int)
+    for c in lab_list:
+        groups[c] += 1
+    sizes_ = sorted((v for v in groups.values() if v > 1), reverse=True)
+    return len(sizes_), sum(sizes_), (sizes_[0] if sizes_ else 0), modularity(lab_list)
+
+def o2_aris(lab_map):
+    """ARI against option 2 over all nodes, and over the sources both methods cluster."""
+    all_ = ari(o2_lab, lab_map)
+    cnt = Counter(lab_map.values())
+    both_ = [ip for ip in nodes if len(o2[o2_lab[ip]]["members"]) > 1 and cnt[lab_map[ip]] > 1]
+    return all_, (ari({ip: o2_lab[ip] for ip in both_}, {ip: lab_map[ip] for ip in both_}) if both_ else float("nan"))
+
+if args.sweep:
+    print()
+    print("resolution sweep (Louvain, best of %d order%s at each value; ARI vs option 2 over all nodes / over the sources both cluster; ARI vs the resolution-%.2f partition)"
+          % (max(1, args.seeds), "" if args.seeds <= 1 else "s", args.resolution))
+    print("  resolution  communities  covered  largest  modularity  ARI_o2_all  ARI_o2_both  ARI_vs_main")
+    for r_txt in args.sweep.split(","):
+        gamma = float(r_txt)
+        best = None
+        for seed in range(max(1, args.seeds)):
+            lab = louvain(adj, len(nodes), random.Random(1000 + seed), gamma)
+            q = modularity(lab)
+            if best is None or q > best[0]:
+                best = (q, lab)
+        lab = best[1]
+        lab_map = {nodes[k]: lab[k] for k in range(len(nodes))}
+        n_c, cov, big, q = summarise(lab)
+        a_all, a_both = o2_aris(lab_map)
+        print("  %-10.2f  %-11d  %-7d  %-7d  %-10.3f  %-10.3f  %-11.3f  %.3f"
+              % (gamma, n_c, cov, big, q, a_all, a_both, ari(best_lab, lab_map)))
+    print("  (modularity is always the resolution-1 modularity of the partition, so the values compare;")
+    print("   a sweep that leaves the big campaigns' ARI_o2_both high at every value means the")
+    print("   campaigns do not depend on the parameter -- which is the question the sweep answers)")
+
+# --- label propagation -----------------------------------------------------------
+def label_propagation(adj_, n, rnd, max_sweeps=200):
+    """Asynchronous weighted label propagation (Raghavan et al. 2007).
+    Every node starts as its own label; in random order each node takes the
+    label with the greatest total edge weight among its neighbours, ties broken
+    at random; stop when a full sweep changes nothing. No objective function,
+    no resolution parameter -- a different notion of community from Louvain's,
+    which is the point of using it as the comparison."""
+    lab = list(range(n))
+    order = list(range(n))
+    for _ in range(max_sweeps):
+        rnd.shuffle(order)
+        changed = 0
+        for i in order:
+            nb = adj_.get(i)
+            if not nb:
+                continue
+            w_to = defaultdict(float)
+            for j, w in nb.items():
+                w_to[lab[j]] += w
+            top = max(w_to.values())
+            cands = [c for c, w in w_to.items() if w >= top - 1e-12]
+            if lab[i] in cands:
+                continue
+            new = rnd.choice(cands)
+            if new != lab[i]:
+                lab[i] = new
+                changed += 1
+        if changed == 0:
+            break
+    # relabel densely
+    rel = {}
+    return [rel.setdefault(c, len(rel)) for c in lab]
+
+if args.lpa:
+    lpa_runs = []
+    for seed in range(max(1, args.seeds)):
+        lab = label_propagation(adj, len(nodes), random.Random(2000 + seed))
+        lpa_runs.append((modularity(lab), seed, lab))
+    lpa_runs.sort(key=lambda r: -r[0])
+    lq, lseed, llab = lpa_runs[0]
+    lpa_map = {nodes[k]: llab[k] for k in range(len(nodes))}
+    n_c, cov, big, q = summarise(llab)
+    a_all, a_both = o2_aris(lpa_map)
+    print()
+    print("label propagation (the comparison method; best of %d order%s: seed %d)"
+          % (len(lpa_runs), "" if len(lpa_runs) == 1 else "s", lseed))
+    print("  communities with >=2 sources   %d   covering %d of %d nodes (%.1f%%); largest %d; modularity %.3f"
+          % (n_c, cov, len(nodes), 100.0 * cov / max(1, len(nodes)), big, q))
+    print("  ARI vs Louvain (main run)      %.3f" % ari(best_lab, lpa_map))
+    print("  ARI vs option 2                %.3f over all nodes   %.3f over the sources both cluster" % (a_all, a_both))
+    if len(lpa_runs) > 1:
+        la = sorted(ari(lpa_map, {nodes[k]: r[2][k] for k in range(len(nodes))}) for r in lpa_runs[1:])
+        print("  order-dependence               ARI vs best  min %.3f  median %.3f  max %.3f   (label propagation is known to be unstable; this measures it)"
+              % (la[0], la[len(la) // 2], la[-1]))
+    together = []
+    for r, c in enumerate(o2_multi[:args.top], 1):
+        cnt = Counter(lpa_map[ip] for ip in c["members"])
+        together.append("#%d:%.0f%%" % (r, 100.0 * max(cnt.values()) / len(c["members"])))
+    print("  option-2 clusters intact       %s" % "  ".join(together))
 
 # --- csv -------------------------------------------------------------------------
 if args.csv:

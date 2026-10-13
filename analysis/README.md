@@ -386,6 +386,22 @@ one — the 41-source chain of 6 October is a component, not a campaign, and
 this shows what a community method makes of it. `--csv PATH` writes one row
 per community with **no address column** and refuses to overwrite.
 
+Two flags added on 13 October 2026, the two pieces of the plan the first pass
+had left out. `--sweep 0.5,1,2,4` re-runs Louvain at each **resolution** and
+tabulates communities, coverage, largest, modularity, the two ARIs against
+option 2 and the ARI against the main partition — the plan's point was that the
+default resolution silently decides how many communities you find, and the sweep
+shows by how much; if the big campaigns stay intact at every value, they do not
+depend on the parameter. `--lpa` runs **label propagation** on the same graph
+as the comparison method: no objective function and no resolution — each node
+takes the weighted majority label of its neighbours until nothing changes — and
+reports its agreement with Louvain and with option 2, its order-dependence over
+`--seeds`, and whether option 2's largest clusters stay intact under it.
+
+```
+python communities.py --db decoy-<snapshot>.sqlite --seeds 10 --sweep 0.5,0.75,1,1.5,2,4 --lpa
+```
+
 Tested on three synthetic databases before any real run: the option-2 test
 database (planted lists A and B, a sliding chain, unique sets, a glue trap) —
 A and B recovered exactly, the chain kept as one 12-source community with an
@@ -395,7 +411,10 @@ and a 30-source sliding chain beside the cliques — Louvain cut the chain into
 two halves of 15, stable over ten orders, which is what modularity does to a
 band graph and why the core column exists. Known limits, printed at the end:
 modularity's resolution limit can merge small campaigns inside a dense
-neighbourhood, and a chain can be cut anywhere.
+neighbourhood, and a chain can be cut anywhere. On the synthetic database the
+sweep splits the planted 20-source campaign at resolution 2, and label
+propagation agrees with option 2 *more* closely than Louvain does (ARI 0.974
+against 0.874) because it, too, breaks the sliding chain into pairs.
 
 ## Getting a file onto the sensor
 
