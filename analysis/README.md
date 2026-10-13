@@ -89,8 +89,10 @@ Three to know about before quoting anything:
 
 - **Query 3** — what was excluded and why. State this alongside any figure. At
   figure-freeze time, take the exclusion tally *from here* rather than adjusting
-  an older number: the exclusion rule went through six versions, so the old
-  figures cannot be arithmetically updated.
+  an older number: the exclusion rule went through seven versions (the seventh,
+  `artefact-protocol`, on 13 October 2026), so the old figures cannot be
+  arithmetically updated. `python3 ingest.py --preview` shows what a rule change
+  would move before it moves anything.
 - **Query 12** — login rows that contain an escape sequence and still count. It
   points the opposite way from query 3 on purpose. Query 3 shows what the rule
   threw out; query 12 shows what it let through.

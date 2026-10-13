@@ -166,7 +166,10 @@ cat <<'MAP'
       10,171/80,845 -- one in eight became nearer one in nine. A figure
       that is not on this map is a figure nobody is refreshing.
     - err-rule slide: the version count and the recovered-attempt count.
-      Six versions as of 5 October 2026, 22 attempts recovered.
+      SEVEN versions as of 13 October 2026: v6 (5 Oct) recovered 22
+      attempts; v7 (13 Oct, artefact-protocol) moved 312 rows from 53
+      sources OUT -- HTTP/SIP probe lines Cowrie had read as logins,
+      found by the option-5 community pass, not by the rule's own checks.
     - err-tty slide: deliberately carries NO figure on its face. Its
       numbers live in its speaker notes under a 9 December refresh
       marker, because every one of them moves daily.

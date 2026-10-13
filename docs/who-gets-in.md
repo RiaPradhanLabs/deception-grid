@@ -124,8 +124,14 @@ The second method also found something the first could not. One community of
 OPTIONS probes sent to the telnet port, read by Cowrie line by line as a
 username and a password. The core rule's ten-pair floor hid them. They sit in
 every password-attempt total and in the 1,493 "sources with a login attempt" as
-of the snapshot; whether they become a seventh artefact rule is an open
-decision recorded in the project checklist, not made here.
+of the snapshot. **They became the seventh artefact rule on 13 October 2026**
+(`artefact-protocol`, commit `673fbe1`): the rows were read on the sensor first
+— 33 SIP sessions from 32 sources, HTTP probes from about twenty more, a dozen
+browser `User-Agent` strings — and the rule tests the username for the two
+shapes they all share, a request line or a header. It moved **312 rows from 53
+sources** out of the counts, previewed and then run with the same table both
+times; `docs/build.md` has the record. The paragraph above is kept as written,
+because the point of it is how the rows were found.
 
 One caveat travels with every "got in" figure in this note: **the decoy
 decides what succeeds.** Cowrie's `userdb.txt` accepts broadly by design, so a

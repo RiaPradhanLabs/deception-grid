@@ -1032,3 +1032,55 @@ UTC. The unscheduled check-in at 16:23 UTC read 3,524 IT sources, 775,620
 events, 262 files held and 76 OT sources straight off the logs (`decoy-status`,
 which is not the figure to quote; `ingest.py` is). 108 of the 262 files arrived
 in the 58 hours since Friday's check-in, against 154 in the first fourteen days.*
+
+# Addendum — 13 October 2026
+
+Monday's check-in done on Tuesday, a flood of nothing, and the seventh version
+of the artefact rule.
+
+**A count that grows tenfold may be counting a different thing.** "Files held"
+went 154 (9 Oct) → 262 (11 Oct) → 1,359 (13 Oct). Five read-only commands
+later: 1,191 of the 1,359 are exactly one byte, every one the sha256 of a
+newline, named `redir_<hex>` — Cowrie's shell-redirection captures, not
+downloads. A Mirai-family telnet loader arrived on 10 October (41 files that
+day, 266 the next, 695 on the 12th), logs in, escalates with `enable` /
+`system` / `shell`, and writes its binary byte by byte with `/bin/busybox echo
+-ne "\x…" > .s` — 2,764 such lines on 12 October alone — and Cowrie's echo
+leaves one newline per write. The 116 MB in the directory belongs to the other
+168 files. The figure map already said *the distinct-hash count is the sample
+count, never the file count*; this is the first time the gap was tenfold, and
+`decoy-status` still prints the file count on every check-in. Open item O17:
+make it print redirect files and distinct hashes separately, so the next flood
+is visible on the check-in itself and not three commands later. Prediction
+kept: "320–340 if the burst continued" — it was 1,359.
+
+**The second method's finding became a rule — by the method, not around it.**
+The 25 sources that `communities.py` grouped on 11 October were read on the
+sensor on 13 October before a line was written: 33 SIP OPTIONS sessions from 32
+sources, HTTP probes from about twenty more, one of them walking a Node-RED
+API, a dozen browser `User-Agent` strings. Every username was a protocol line —
+a request line or a `Name: value` header — and no credential is. Version seven
+(`artefact-protocol`) tests the username for those two shapes and nothing
+else; ten self-test cases pin what must and must not match; and a new
+`--preview` ran the re-derivation without writing, printed 312 rows from 53
+sources pair by pair, and the real run printed the same table and moved the
+same 312. The run after it said `nothing changed`. Six versions were found by
+reading excluded rows; this one could not have been, because the rows carried
+no escape and were never candidates. A rule's own checks ask whether the rule
+agrees with itself. Something else has to ask whether it is looking in the
+right place.
+
+**Two windows that look alike are the commonest snag, in a new form.** SSH was
+opened *inside* the PowerShell window, so for an hour there was no [PS] window
+at all — two PowerShell commands went to the sensor's shell (harmless: "command
+not found", "no such directory"), and one paste put a previous output back
+into the shell as commands (harmless: every line "command not found"). The fix
+is a second PowerShell window, and the rule for the prompts: the window whose
+prompt begins `PS C:\` is [PS], the one whose prompt begins `aster@decoy-01` is
+[SSH]. The 19 November and 9 December prompts should say so.
+
+*As at 13 October 2026, 04:26 UTC, after version seven: 3,945 distinct sources
+across both doors (IT 2,318 on 22 + 2,007 on 23, OT 89), 164,985 arrivals,
+154,867 real password attempts, 7,471 successful logins from 937 sources;
+exclusions 30,984 command, 571 binary, 312 protocol, 84 loopback, 20 analyst;
+1,359 files held of which 1,192 are two distinct contents.*

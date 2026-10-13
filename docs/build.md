@@ -1131,8 +1131,9 @@ rule. **Re-check it after any `ufw` or kernel upgrade**, with the
 
 ### What is excluded, and why
 
-Four reasons and no others. Nothing is deleted — a row that should not count
-gets a reason in the `excluded` column and stays queryable.
+Five reasons and no others (four until 13 October 2026). Nothing is deleted — a
+row that should not count gets a reason in the `excluded` column and stays
+queryable.
 
 | Reason | Meaning |
 |---|---|
@@ -1140,8 +1141,21 @@ gets a reason in the `excluded` column and stays queryable.
 | `analyst` | a session from one of our own addresses |
 | `artefact-command` | Cowrie's telnet handler read a stream of commands as login input and recorded it as a username/password pair |
 | `artefact-binary` | a login row with no readable credential in it at all |
+| `artefact-protocol` | a login row whose username is an HTTP or SIP request line or header — a scanner speaking the wrong protocol to port 23, read line by line as logins (version seven, 13 October 2026) |
 
-State the tally alongside any figure. **As at 29 September 2026, 16:10 UTC:**
+State the tally alongside any figure. **As at 13 October 2026, 04:26 UTC:**
+
+| | rows |
+|---|---|
+| counts | 886,700 |
+| `artefact-command` | 30,984 |
+| `artefact-binary` | 571 |
+| `artefact-protocol` | 312 |
+| `loopback` | 84 |
+| `analyst` | 20 |
+
+154,867 real password attempts; 3,945 distinct sources across both doors. The
+first tally, kept for the record, **as at 29 September 2026, 16:10 UTC:**
 
 | | rows |
 |---|---|
@@ -1309,11 +1323,67 @@ Of the five versions above, three were found wrong by reading rows and none by
 reading totals. Two of those three were found only because the tool prints its
 own exclusions without being asked.
 
+### Version seven, 13 October 2026 — `artefact-protocol`
+
+The first version not found by reading excluded rows, because the rows it
+concerns were never candidates: they carry no `\xNN` escape, so six versions of
+the rule never looked at them. It was found by a different method. On 11
+October the option-5 clustering pass (`analysis/communities.py`, graph
+communities on the credential lists) grouped 25 sources on an *identical*
+seven-"pair" list — `GET / HTTP/1.0` / `''`, `Call-ID: 50000` / `CSeq: 42
+OPTIONS`, `From: <sip:nm@nm>;tag=root` / `To: <sip:nm2@nm2>`, `Max-Forwards:
+70` / `Content-Length: 0` — a SIP OPTIONS scanner and some HTTP probes, aimed at
+the telnet port and read by Cowrie's login handler one line at a time, each line
+a username and the next a password. Option 2's common-core rule had not seen
+them either: its floor is ten shared pairs and this list has seven.
+
+On 13 October the rows were read on the sensor before anything was written: 33
+SIP sessions from 32 sources, six pairs each plus the blank line; `GET /
+HTTP/1.1` / `Host: <host>:23` from 19 sources; one source walking a Node-RED
+API (`/flows`, `/api/session/properties`, `Node-Red-Api-Version: v2`) with a Go
+HTTP client; a curl; `Accept-Encoding: gzip` from 18; and a dozen browser
+`User-Agent` strings from people or tools that opened the telnet port in a web
+client. Every one has a username that is a **protocol line** — a request line
+(`METHOD target HTTP/1.x` or `… SIP/2.0`) or a header (`Name: value`, with the
+space) — and no credential looks like that. So the rule tests the username
+alone for those two shapes, and nothing else; every shape in it was read from
+the data first.
+
+Two things were added with it. Ten self-test cases, including the ones that
+must *not* match: a header in the password alone (`root` / `Host: example`),
+`admin:admin` (colon without a space), `user name` (a space alone), a bare `GET`,
+and the empty/empty pair. And `--preview`, which runs the re-derivation against
+the current code and writes nothing, so the rows a rule moves can be read
+before they move:
+
+```
+=== PREVIEW: what re-deriving against the current code WOULD change (nothing written) ===
+    312 rows would change
+      column excluded      312 rows
+      (counts) -> artefact-protocol                   312   (53 distinct sources)
+    login rows that change reason, by pair (read these; this table is the argument for the rule):
+      artefact-protocol            'GET / HTTP/1.0'                     ''                                33
+      artefact-protocol            'OPTIONS sip:nm SIP/2.0'             'Via: SIP/2.0/TCP nm;branch=foo'    33
+      ...
+```
+
+The real run (04:26 UTC) printed the identical table and moved **312 rows from
+53 sources**; the run after it said `nothing changed`. Nothing moved the other
+way. The 53 still count as *sources* — their connections are real; only their
+"logins" are not. Stated limitation: the blank line that ends a header block
+arrives as an empty/empty pair, which no per-row rule can tell from a
+deliberate empty probe, so one such row per probe session still counts (about
+50 rows). The correction slide's "N of M recorded attempts" now has a seventh
+version behind it and is re-derived from query 3 at the freeze like everything
+else. The lesson is in `lessons-learnt.md` under 13 October: a method's own
+self-checks only ask whether it agrees with itself; it took a second method to
+find what both had been counting.
+
 ### Regression suite
 
-Sixteen cases, embedded in `ingest.py` as `--selftest` since 5 October 2026 —
-fourteen credential rows plus the loopback and stranger checks — run against
-every edit, and every one of them is a row observed on this sensor or a specific
+Twenty-six cases, embedded in `ingest.py` as `--selftest` since 5 October 2026
+— sixteen then, ten more on 13 October for version seven — twenty-four
+credential rows plus the loopback and stranger checks, run against every edit, and every one of them is a row observed on this sensor or a specific
 defect a previous version had. (The 29 September suite had nineteen; it lived
 outside the script and was replaced. Which three were not carried across has
 not been reconstructed, and is not claimed here. This paragraph said "nineteen"
