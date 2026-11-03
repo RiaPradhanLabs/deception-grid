@@ -29,6 +29,7 @@ None were found by reading totals. A wrong total looks exactly like a right one.
 | 11 | `option4-clients.sql` | sensor | M3, the last gate on option 4: do the SSH client version strings and HASSH fingerprints vary across the sessions that got in, and does escalation vary with them? Aggregates only. |
 | 12 | `fingerprints.py` | sensor | ML option 2: credential sets as campaign fingerprints — denominator, glue pairs, twins, relative common-core clusters, `--shuffle` order-independence, `--clients` (which SSH tool runs each campaign), `--success` (which campaigns get in), `--timeline` (sources per day), `--csv` (one anonymised row per cluster). Prints credential pairs, client strings and counts, never an address. |
 | 13 | `communities.py` | laptop or sensor | ML option 5: source–credential graph communities (Jaccard ≥ 0.3 edges, Louvain) on the same reduced sets as `fingerprints.py`, with the ARI and a cross-tab against option 2's clusters — the second method that checks the first. `--seeds` for order-dependence, `--csv` for one anonymised row per community. Never prints an address. |
+| 14 | `inventory.py` | sensor | The inventory tables from `file-features.csv`: files and distinct contents by kind, ELF architectures as distinct contents, non-ELF classes, sizes, entropy bands, the most-copied contents; `--dir` for capture dates (stat only), `--db` for the four kinds of file event as counts. Prints hash prefixes, never an address or a URL. |
 
 ---
 
@@ -147,6 +148,37 @@ them, so they can be excluded by a `WHERE` clause and the count stated. Quote
 Only the CSV comes back to the laptop. After the machine is deleted that CSV is
 the only record of what was captured at byte level, so it has to exist before
 teardown or the analysis becomes impossible rather than merely undone.
+
+## inventory.py
+
+**Runs on the sensor, after `features-files.py`. Reads the CSV; opens no captured file.**
+
+```
+sudo python3 ~/analysis/inventory.py --csv ~/analysis/file-features.csv \
+     --dir /home/cowrie/cowrie/var/lib/cowrie/downloads --db ~/analysis/decoy.sqlite
+```
+
+Twelve tables (A–L) for the inventory note, written 3 November 2026 for that
+day's session. From the CSV alone: files and distinct contents by kind; contents
+that arrived by more than one route (a binary pushed over scp *and* written by a
+redirect loader is one sample, two routes); ELF binaries by architecture counted
+as distinct contents first and files second, with stripped / no-sections /
+truncated beside them; non-ELF contents by `file(1)` class; a size distribution;
+entropy bands over whole files; the most-copied contents. With `--dir`, the
+files are `stat()`ed — never opened — for modification times: first and last
+capture per kind and arrivals per ISO week with the contents seen for the first
+time that week. With `--db`, query 13's rule is applied verbatim (eventid *and*
+url decide, never url alone) to give the four kinds of file event, the hash-named
+files the database does and does not know, the fetched files as they stand, and
+file events per week — sources and URLs as **counts only**.
+
+Why the distinction matters: on 3 November 2026 the directory held 10,346 files
+and 164 distinct contents; 323 files were ELF binaries but only 140 files were
+named by hash, so most of the binaries had arrived as shell-redirect captures —
+the same payload written byte by byte, session after session. A table of files
+would have counted the loader's persistence; a table of distinct contents
+counts the samples. Hashes are printed as 12-character prefixes, enough to find
+the CSV row and nothing more.
 
 ## features-tty.py
 
