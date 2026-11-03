@@ -156,6 +156,19 @@ cat <<'MAP'
       the attacker; counts are sessions, not sources; glue threshold and core
       rule stated with every cluster figure.
 
+  docs/samples-inventory.md            (features-files.py --verify then --out,
+                                        inventory.py --csv --dir --db; this
+                                        script's query 13 and the must-be-zero line)
+    - files vs distinct contents by route; ELF by architecture as DISTINCT
+      contents first and files second; non-ELF by file(1) class; sizes;
+      entropy bands; the most-copied contents; arrivals per ISO week
+    - the four kinds of file event with sessions, sources and URLs as COUNTS
+    - CAVEAT TO KEEP: 164 distinct contents is the sample count (3 Nov 2026);
+      10,346 files, 323 ELF files and 231 SuperH files are not -- one loader
+      wrote one byte 9,391 times and seven small binaries 230 times. Entropy
+      >= 7.5 is consistent with packing, not proof. Fetched means before
+      29 Sep 12:00 UTC; everything later is a blocked attempt.
+
   the slide deck
     - hook, speed, passwords, origins slides
     - CAVEAT TO KEEP: origins are REGISTRATION, not location, and the

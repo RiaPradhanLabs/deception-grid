@@ -23,7 +23,10 @@ days), [`docs/first-ot-hours.md`](docs/first-ot-hours.md) (the OT door's first
 fourteen hours: 2 h 32 min to the first stranger, and every request an
 identification), [`docs/who-gets-in.md`](docs/who-gets-in.md) (the sessions
 that log in: twelve SSH clients, and what each does once inside is decided by
-which one it is).
+which one it is), [`docs/samples-inventory.md`](docs/samples-inventory.md)
+(what was captured: 164 distinct contents in 10,346 files as at 3 November
+2026 — 99 ELF binaries, mostly x86-64; seventeen Windows executables pushed
+at a Linux decoy; one loader that wrote the same byte 9,391 times).
 
 ## What this is
 
@@ -84,8 +87,9 @@ analysis/     ingest.py, schema.sql, weekly.sql, figures.sh, geo-lookup.sh,
               what order to run them in and which traps each exists to prevent
 config/       the running configuration of both decoys, copied verbatim, with
               a placement table and the reasoning for every change from default
-docs/         build log, rules of engagement, findings notes, lessons learnt,
-              the OT-door runbook, and the evidence screenshots
+docs/         build log, rules of engagement, findings notes, the sample
+              inventory, lessons learnt, the OT-door runbook, and the evidence
+              screenshots
 emulators/    the plant-register emulation that animates the OT decoy
 scripts/      allow-me.ps1, backup.ps1, decoy-status
 ```
