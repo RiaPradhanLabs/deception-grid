@@ -117,6 +117,35 @@ thirteen — against 1 of 11 on the first morning. Twenty-seven came once. The
 2-of-11 paragraph stands as the baseline it said it was; this is the second
 point, and the figure-freeze on 9 December takes the third.
 
+**Measured again on 3 November, 05:58 UTC — the third point, four weeks
+after opening.** 390 sources, 978 connections in 540 sessions, 333 Modbus
+requests from 235 sources. The door is still mostly a place where things ask
+what it is: code 43 ×295 from 225 sources and code 17 ×21 from 16. But the
+"no read" line above has moved for the first time — **code 3 (read holding
+registers) ×8, all from one source, and code 1 (read coils) ×1** — nine reads
+in four weeks against 316 identification requests, stated as a count rather
+than a trend. Still **no write** (codes 5, 6, 15, 16). One frame with a valid
+protocol identifier carries function code 0 and is counted under *other /
+unhandled*; the non-Modbus frames of 15b now number seven from five sources
+(8–27 October), all fourteen bytes with protocol id `0001`. The decoy-status
+count, which includes our own probe, went 42 → 76 → 90 → 133 → 186 → 223 →
+302 → 333 → 384 → 391 across the check-ins from 9 October to today: steady at
+roughly 7 a day until mid-October, then about 16 a day since, with daily
+arrivals between 18 and 65 from 7 to 30 sources.
+
+Query 18: **110 of the 390 (28.2 %) had also been to the IT door**, against
+8 of 41 on 9 October and 2 of 11 on the first morning. The shortest gap is
+now *negative* — **−21.8 days**, a source that reached the OT door first and the
+IT door three weeks later — and the longest 31.2 days; the first morning's
+"days, not minutes" and the second point's "one visitor sweeping both doors in
+one pass" are both inside that range, and neither describes the population.
+Query 19: **121 of 390 returned** — 60 came twice, 16 six times, the most
+persistent 45 times — against 14 of 41 and 1 of 11. The IT door, for scale,
+stood at 10,002 distinct sources and 345,774 sessions the same morning
+(query 16): the factory door sees one visitor for every twenty-six at the office
+door, and more than one in four of them has also been to the office door. The figure-freeze
+on 9 December takes the fourth point.
+
 ## Next look
 
 The recurring check-in reads the OT section of `decoy-status` on Mondays and

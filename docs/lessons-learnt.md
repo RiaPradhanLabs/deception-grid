@@ -1084,3 +1084,68 @@ across both doors (IT 2,318 on 22 + 2,007 on 23, OT 89), 164,985 arrivals,
 154,867 real password attempts, 7,471 successful logins from 937 sources;
 exclusions 30,984 command, 571 binary, 312 protocol, 84 loopback, 20 analyst;
 1,359 files held of which 1,192 are two distinct contents.*
+
+
+# Addendum — 3 November 2026
+
+The inventory session: the one dated job whose output cannot be produced after
+the machine is deleted. It went as planned — gate first, the existing tool
+verified before it was trusted, the CSV checked by size at both ends — and it
+still produced three lessons, all variations on ones already in this file.
+
+**A count you already know is misleading will mislead you again, one level
+down.** Since 13 October everyone on this project has known that the file
+count in the capture directory is a loader-session counter, not a sample
+count: one telnet loader writes a one-byte newline per session, 9,391 of them
+by this morning. So the sample figure has been the distinct-hash count for
+three weeks, and that part was right. What nobody had asked was whether the
+*ELF-file* count was the same kind of number. It was: `--verify` found 323 ELF
+binaries where I had predicted 80–110, and 231 of them were seven small
+SuperH payloads the same loader assembles byte by byte with `echo -ne`, one
+complete binary per session. Counted as files, SuperH was the largest
+architecture on the sensor; counted as contents it was seven samples. The
+per-architecture table, the per-class table and the size table all had the
+same defect waiting in them. The fix was structural rather than a caveat:
+`inventory.py` counts distinct contents first and files second in every table
+it prints, and the note's caveats block says which column is the sample count.
+The general form: when a denominator has been shown to be wrong once, every
+table that slices it inherits the problem, and the slice does not announce it.
+
+**A result that is impossibly small is a failed check, not a finding.** When
+the backup script hung on its final disconnect for the second time
+(29 October; the first was 7 October), the archive was verified by hand, and
+the `tar -tzf` count for TTY recordings came back as **1** against an expected
+530–560. The archive was fine; the regular expression was not — `\.log$` does
+not match tar's listing on Windows, and `/tty/[^/]+` gave 550. The point is
+not the regex. It is that a check whose answer is absurd has told you about
+the check, and the right move is to fix the check and run it again, never to
+explain the absurdity. The same shape as 29 September's five wrong figures, in
+a smaller frame.
+
+**A reminder for work already done is noise, and noise trains ignoring.** The
+inventory had its own scheduled prompt, due to fire at 07:58 UTC into a fresh
+session. The work was done from the running chat by 07:03, so the prompt was
+disabled rather than left to fire — the 5 October lesson about the alarm that
+cried wolf on every run, applied to reminders: a notification that arrives
+about something finished is the first one you learn to swipe away, and the
+second one you swipe away is the one that mattered. The 19 November prompt
+was rewritten the same minute so that it starts with the frozen snapshot
+rather than re-doing the inventory; its step 1 now says what exists and how
+to tell whether it needs refreshing.
+
+Two things from the day that are findings rather than lessons, recorded in
+`docs/samples-inventory.md`: seventeen Windows executables were pushed over scp
+at a host that announces itself as Linux, and three SSH public keys arrived as
+files — the shape of an `authorized_keys` persistence attempt against a decoy
+that will never read them.
+
+*As at 3 November 2026, 06:33 UTC: 10,346 files in the capture directory,
+**164 distinct contents** — 99 ELF binaries (53 x86-64, 14 ARM, 10 MIPS,
+7 SuperH, 3 each aarch64/m68k/ppc/x86, 2 sparc, 1 riscv; none truncated) and
+65 non-ELF; 151 of 164 captured exactly once; every hash-named file known to
+the database (85 pushed, 33 fetched before 29 September, 22 redirect
+captures); fetches after the block 0, blocked attempts 16,436. `figures.sh` at
+05:58 UTC the same morning: 10,282 distinct sources across both doors,
+346,752 arrivals, 325,723 real password attempts, 17,566 successful logins
+from 2,105 sources; exclusions 47,672 command, 690 binary, 644 protocol,
+84 loopback, 20 analyst.*
