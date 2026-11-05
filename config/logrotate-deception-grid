@@ -14,7 +14,16 @@
 /home/conpot/log/conpot.log
 {
     daily
-    rotate 30
+    # rotate 120, not 30 -- changed 5 November 2026.
+    #
+    # The OT door opened on 6 October. With rotate 30 the opening evening's
+    # log would have been deleted at the 6 November rotation and one day of raw
+    # OT log would have left the sensor every night after it. Found on the
+    # 5 November check-in, when the conpot.json count stopped climbing at 31.
+    # Every row is in decoy.sqlite and every day since 7 October is in a backup
+    # tarball, so nothing was lost; but the sensor keeps its own raw logs to the
+    # end. 120 covers 6 October to the 12 December teardown with room.
+    rotate 120
     missingok
     notifempty
     su conpot conpot
